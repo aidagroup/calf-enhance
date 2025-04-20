@@ -5,6 +5,14 @@ import gymnasium as gym
 import os
 from src import RUN_PATH
 from pathlib import Path
+from src.envs.underwaterdrone import (
+    OFFSET_LAT,
+    DRONE_INERTIA,
+    TOP_Y,
+    DRONE_MASS,
+    GRAVITY,
+    DRAG_COEFF,
+)
 
 
 def make_env(env_id, seed, capture_video=True, run_name="underwater_drone_demo"):
@@ -28,10 +36,10 @@ class Controller:
         self,
         kp_theta: float = 20.0,
         kd_theta: float = 6.0,
-        kvx: float = 2.0,
+        kvx: float = 4.0,
         kvy: float = 2.0,
         mass: float = 1.0,
-        gravity: float = 0.5,
+        gravity: float = 1,
         offset: float = 0.2,
         max_f_long: float = 3.0,
         max_f_lat: float = 3.0,
@@ -53,34 +61,73 @@ class Controller:
 
     def get_action(self, obs):
         x, y, cos_theta, sin_theta, v_x, v_y, omega = obs
+        alpha = 0.5
         theta = np.arctan2(sin_theta, cos_theta)
 
-        tau = -self.kp_theta * (theta - np.pi / 2) - self.kd_theta * omega
-        F_lat = np.clip(tau / self.offset, -self.max_f_lat, self.max_f_lat)
+        norm_r = np.sqrt(x**2 + (TOP_Y - y) ** 2)
+        norm_v = np.sqrt(v_x**2 + v_y**2)
+        n_x = -x / norm_r
+        n_y = (TOP_Y - y) / norm_r
+        norm_r_dot = (x * v_x - (TOP_Y - y) * v_y) / norm_r
+        n_x_dot = (-v_x - n_x * norm_r_dot) / norm_r
+        n_y_dot = (-v_y - n_y * norm_r_dot) / norm_r
 
-        ax_des = -self.kvx * v_x
-        ay_des = -self.gravity - self.kvy * v_y
+        v_x_diff = v_x - alpha * n_x
+        v_y_diff = v_y - alpha * n_y
+        a_long = v_x_diff * cos_theta + v_y_diff * sin_theta
+        a_lat = -v_x_diff * sin_theta + v_y_diff * cos_theta + OFFSET_LAT * omega
 
-        Fx_lat = -sin_theta * F_lat
-        Fy_lat = cos_theta * F_lat
+        neg_b = (
+            DRAG_COEFF * norm_v * (v_x_diff * cos_theta + v_y_diff * sin_theta)
+            - DRONE_MASS * GRAVITY * v_y_diff
+            - alpha * DRONE_MASS * (v_x_diff * n_x_dot - v_y_diff * n_y_dot)
+        )
 
-        if abs(sin_theta) > 0.1:
-            F_long = (ay_des * self.mass - Fy_lat) / sin_theta
-        else:
-            F_long = (
-                (ax_des * self.mass - Fx_lat) / cos_theta
-                if abs(cos_theta) > 0.1
-                else 0.0
-            )
+        target_luapunov = 10 * (v_x_diff**2 + v_y_diff**2) + 10 * omega**2
 
-        F_long = np.clip(F_long, -self.max_f_long, self.max_f_long)
+        eps = 1e-6
+        F_long = a_long * (neg_b - target_luapunov) / (eps + a_long**2 + a_lat**2)
+        F_lat = a_lat * (neg_b - target_luapunov) / (eps + a_long**2 + a_lat**2)
 
+        print(v_x, v_y, omega)
+        # target_theta = np.arctan((TOP_Y - y) / (eps + x))
+        # derivative_arctan = (v_y * x + (TOP_Y - y) * v_x) / (x**2 + (TOP_Y - y) ** 2)
+        # err_theta = theta - target_theta
+        # # print(
+        # #     DRONE_MASS / 2 * (v_x**2 + v_y**2)
+        # #     + DRONE_INERTIA * omega**2 / 2
+        # #     + err_theta**2 / 2
+        # # )
+
+        # a_long = v_x * cos_theta + v_y * sin_theta
+        # a_lat = -v_x * sin_theta + v_y * cos_theta + OFFSET_LAT * omega
+        # gain = 10.0
+        # kx = 0.1
+        # ky = 0.1
+        # k_theta = 1.0
+        # r = (
+        #     DRONE_MASS * GRAVITY * v_y
+        #     + DRAG_COEFF * (v_x**2 + v_y**2) ** 1.5
+        #     # - kx * x * v_x
+        #     # + ky * (4 - y) * v_y
+        #     - gain * (x**2 + (TOP_Y - y) ** 2)
+        #     - k_theta * err_theta * (omega - derivative_arctan)
+        # )
+        # F_long = a_long * r / (eps + a_long**2 + a_lat**2)
+        # F_lat = a_lat * r / (eps + a_long**2 + a_lat**2)
+        # # eps = 1e-6
+        # # print(a_long**2 + a_lat**2)
+
+        # # print(F_long, F_lat)
+        # F_long = np.clip(F_long, -self.max_f_long, self.max_f_long)
+        # F_lat = np.clip(F_lat, -self.max_f_lat, self.max_f_lat)
+        # print(F_long, F_lat)
         return np.array([F_long, F_lat], dtype=np.float32)
 
 
 def main():
     # Create the environment with video recording
-    seed = 21
+    seed = None
     env_id = "UnderwaterDrone-v0"
     capture_video = True
     env_fn = make_env(env_id, seed, capture_video)

@@ -10,14 +10,14 @@ DRONE_INERTIA = 0.1
 DRONE_RADIUS = 0.2
 DRAG_COEFF = 0.05
 OFFSET_LAT = 0.2
-MAX_F_LONG = 1.0
-MAX_F_LAT = 0.5
+MAX_F_LONG = 3.0
+MAX_F_LAT = 3.0
 GRAVITY = 0.5
 TOP_Y = 4.0
 HOLE_WIDTH = 4.0 * DRONE_RADIUS
 MAX_X = 2.5
 MAX_V = 3.0
-MAX_OMEGA = 3.0
+MAX_OMEGA = 5.0
 
 
 class UnderwaterDrone:
@@ -45,12 +45,12 @@ class UnderwaterDrone:
         self.rng = np.random.RandomState(seed)
 
         # Randomize initial state using the seeded generator
-        self.x = self.rng.uniform(-0.5, 0.5)
-        self.y = self.rng.uniform(0.3, 0.5)
-        self.theta = self.rng.uniform(-np.pi / 6, np.pi / 6)
-        self.v_x = self.rng.uniform(-0.5, 0.5)
-        self.v_y = self.rng.uniform(-0.5, 0.5)
-        self.omega = self.rng.uniform(-0.5, 0.5)
+        self.x = self.rng.uniform(-2.0, 2.0)
+        self.y = self.rng.uniform(0.2, 1.5)
+        self.theta = self.rng.uniform(-np.pi, np.pi)
+        self.v_x = self.rng.uniform(-1, 1)
+        self.v_y = self.rng.uniform(-1, 1)
+        self.omega = self.rng.uniform(-1, 1)
 
         self.m = m
         self.I = I
