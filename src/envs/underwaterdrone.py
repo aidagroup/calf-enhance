@@ -4,20 +4,36 @@ from gymnasium import spaces
 import pygame
 from typing import Optional, Tuple, Dict, Any
 
+# TIME_STEP_SIZE = 0.02
+# DRONE_MASS = 1.0
+# DRONE_INERTIA = 0.1
+# DRONE_RADIUS = 0.2
+# DRAG_COEFF = 0.05
+# OFFSET_LAT = 0.2
+# MAX_F_LONG = 3.0
+# MAX_F_LAT = 3.0
+# GRAVITY = 0.5
+# TOP_Y = 4.0
+# HOLE_WIDTH = 4.0 * DRONE_RADIUS
+# MAX_X = 2.5
+# MAX_V = 3.0
+# MAX_OMEGA = 5.0
+
+
 TIME_STEP_SIZE = 0.02
 DRONE_MASS = 1.0
 DRONE_INERTIA = 0.1
 DRONE_RADIUS = 0.2
 DRAG_COEFF = 0.05
 OFFSET_LAT = 0.2
-MAX_F_LONG = 3.0
-MAX_F_LAT = 3.0
+MAX_F_LONG = 1.0
+MAX_F_LAT = 0.5
 GRAVITY = 0.5
 TOP_Y = 4.0
 HOLE_WIDTH = 4.0 * DRONE_RADIUS
 MAX_X = 2.5
 MAX_V = 3.0
-MAX_OMEGA = 5.0
+MAX_OMEGA = 3.0
 
 
 class UnderwaterDrone:
@@ -45,12 +61,12 @@ class UnderwaterDrone:
         self.rng = np.random.RandomState(seed)
 
         # Randomize initial state using the seeded generator
-        self.x = self.rng.uniform(-2.0, 2.0)
-        self.y = self.rng.uniform(0.2, 1.5)
-        self.theta = self.rng.uniform(-np.pi, np.pi)
-        self.v_x = self.rng.uniform(-1, 1)
-        self.v_y = self.rng.uniform(-1, 1)
-        self.omega = self.rng.uniform(-1, 1)
+        self.x = self.rng.uniform(-0.1, 0.1)
+        self.y = self.rng.uniform(0.3, 0.4)
+        self.theta = self.rng.uniform(np.pi / 2 - 0.1, np.pi / 2 + 0.1)
+        self.v_x = self.rng.uniform(-0.2, 0.2)
+        self.v_y = self.rng.uniform(-0.2, 0.2)
+        self.omega = self.rng.uniform(-0.2, 0.2)
 
         self.m = m
         self.I = I
@@ -127,10 +143,10 @@ class UnderwaterDrone:
         self.y += self.v_y * dt
         self.theta += self.omega * dt
 
-        self.x = np.clip(self.x, -MAX_X, MAX_X)
-        self.y = np.clip(self.y, 0.0, TOP_Y)
+        # self.x = np.clip(self.x, -MAX_X, MAX_X)
+        # self.y = np.clip(self.y, 0.0, TOP_Y)
 
-        if self._in_hole():
+        if self._in_hole() or self._near_borders():
             self._freeze()
 
     def _in_hole(self):
@@ -143,6 +159,17 @@ class UnderwaterDrone:
             if -hole_half <= self.x <= hole_half:
                 return True
         return False
+
+    def _near_borders(self):
+        """
+        Return True if the drone's center is near the borders.
+        """
+        return (
+            np.abs(self.x) > MAX_X - 0.1
+            or self.y < 0.0 + 0.1
+            or np.abs(self.x) > self.hole_width / 2.0
+            and self.y >= TOP_Y
+        )
 
     def _freeze(self):
         """Freeze the drone's motion. Zero velocities, 'frozen'=True."""
@@ -231,18 +258,18 @@ class UnderwaterDroneEnv(gym.Env):
         reward = self._calculate_reward()
 
         # Check if episode is terminated
-        eps = 0.05
-        terminated = (
-            np.abs(self.drone.x) > MAX_X - eps
-            or self.drone.y < 0.0 + eps
-            or (
-                np.abs(self.drone.x) > HOLE_WIDTH / 2 + eps
-                and self.drone.y > TOP_Y - eps
-            )
-            or np.linalg.norm(np.array([self.drone.v_x, self.drone.v_y]), ord=2) > MAX_V
-            or np.abs(self.drone.omega) > MAX_OMEGA
-        )
-
+        # eps = 0.05
+        # terminated = (
+        #     np.abs(self.drone.x) > MAX_X - eps
+        #     or self.drone.y < 0.0 + eps
+        #     or (
+        #         np.abs(self.drone.x) > HOLE_WIDTH / 2 + eps
+        #         and self.drone.y > TOP_Y - eps
+        #     )
+        #     or np.linalg.norm(np.array([self.drone.v_x, self.drone.v_y]), ord=2) > MAX_V
+        #     or np.abs(self.drone.omega) > MAX_OMEGA
+        # )
+        terminated = False
         # Check if episode is truncated (not used here)
         truncated = False
 
@@ -250,12 +277,14 @@ class UnderwaterDroneEnv(gym.Env):
 
     def _calculate_reward(self) -> float:
         # Simple reward: -1 if frozen, otherwise 0.01 for each step plus height bonus
-        return np.exp(
+        return (
             -((self.drone.y - TOP_Y) ** 2) / 16
             - (self.drone.x - 0.0) ** 2 / 9
             - 0.01 * self.drone.v_x**2
             - 0.01 * self.drone.v_y**2
             - 0.01 * self.drone.omega**2
+            - 1 / (1 + (np.abs(self.drone.x) - MAX_X) ** 2)
+            - 1 / (1 + (self.drone.y) ** 2)
         )
 
     def _get_obs(self) -> np.ndarray:
