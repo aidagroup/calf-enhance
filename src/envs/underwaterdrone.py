@@ -226,6 +226,9 @@ class UnderwaterDroneEnv(gym.Env):
         # Trajectory tracking
         self.trajectory = []
 
+        # Heatmap surface
+        self.heatmap_surface = None
+
         # Reset the environment
         self.reset()
 
@@ -285,6 +288,10 @@ class UnderwaterDroneEnv(gym.Env):
             - 0.01 * self.drone.omega**2
             - 1 / (1 + (np.abs(self.drone.x) - MAX_X) ** 2)
             - 1 / (1 + (self.drone.y) ** 2)
+            - 5
+            * np.exp(
+                (-((self.drone.x - 0.0) ** 2) - (self.drone.y - TOP_Y / 2.0) ** 2) / 0.5
+            )
         )
 
     def _get_obs(self) -> np.ndarray:
@@ -321,6 +328,78 @@ class UnderwaterDroneEnv(gym.Env):
 
             self.clock = pygame.time.Clock()
 
+            # Create heatmap surface
+            self._create_heatmap()
+
+    def _create_heatmap(self):
+        """Create a surface with the heatmap visualization of the Gaussian component"""
+        if self.screen is None:
+            return
+
+        # Create a transparent surface for the heatmap
+        self.heatmap_surface = pygame.Surface(
+            (self.screen_width, self.screen_height), pygame.SRCALPHA
+        )
+
+        # Number of points to sample
+        nx, ny = 100, 100
+
+        # Create coordinate grid in physics space
+        x_points = np.linspace(-MAX_X, MAX_X, nx)
+        y_points = np.linspace(0, TOP_Y, ny)
+
+        # Precompute all Gaussian values for normalization
+        gaussian_vals = np.zeros((nx, ny))
+        for i, x in enumerate(x_points):
+            for j, y in enumerate(y_points):
+                gaussian_vals[i, j] = 5 * np.exp(
+                    (-((x - 0.0) ** 2) - (y - TOP_Y / 2.0) ** 2) / 0.5
+                )
+
+        # Find max value for normalization
+        max_val = np.max(gaussian_vals)
+        if max_val > 0:
+            gaussian_vals = gaussian_vals / max_val
+
+        # Draw the heatmap with a color gradient
+        for i, x in enumerate(x_points):
+            for j, y in enumerate(y_points):
+                # Get normalized value
+                norm_val = gaussian_vals[i, j]
+
+                # Skip very small values for performance
+                if norm_val < 0.05:
+                    continue
+
+                # Convert physics coordinates to pixel coordinates
+                px = self.to_pixels_x(x)
+                py = self.to_pixels_y(y)
+
+                # Create a color gradient from blue (cold) to red (hot)
+                # norm_val goes from 0 to 1
+                if norm_val < 0.5:
+                    # Blue to purple transition (cold)
+                    blue = 255
+                    red = int(norm_val * 2 * 255)
+                    green = 0
+                else:
+                    # Purple to red transition (hot)
+                    blue = int((1 - norm_val) * 2 * 255)
+                    red = 255
+                    green = 0
+
+                # Alpha channel based on the value
+                alpha = int(min(180, norm_val * 200))
+
+                # Draw with appropriate size based on value
+                radius = max(1, int(norm_val * 3))
+                pygame.draw.circle(
+                    self.heatmap_surface,
+                    (red, green, blue, alpha),  # RGBA with alpha
+                    (px, py),
+                    radius,
+                )
+
     def render(self) -> Optional[np.ndarray]:
         if self.render_mode is None:
             return None
@@ -350,6 +429,10 @@ class UnderwaterDroneEnv(gym.Env):
             (25, 25, 150),  # Water color
             pygame.Rect(hole_left, 0, hole_right - hole_left, hole_top),
         )
+
+        # Draw the heatmap
+        if self.heatmap_surface is not None:
+            self.screen.blit(self.heatmap_surface, (0, 0))
 
         # Draw environment boundaries with thick black lines
         # Left boundary

@@ -16,6 +16,7 @@ from src.utils.mlflow import mlflow_monitoring, MlflowConfig
 from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
+from run.eval_nominal import Controller
 
 
 @dataclass
@@ -192,6 +193,18 @@ def main(args: Args):
         list(qf1.parameters()) + list(qf2.parameters()), lr=args.learning_rate
     )
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
+    controller = Controller()
+    critic_change_rate = 0.01
+
+    def calc_q_value(obs, action):
+        torch_obs = torch.tensor(obs).to(device).reshape(1, -1)
+        torch_action = torch.tensor(action).to(device).reshape(1, -1)
+        with torch.no_grad():
+            q_value = torch.min(
+                qf1_target(torch_obs, torch_action),
+                qf2_target(torch_obs, torch_action),
+            )
+            return q_value.cpu().numpy()[0, 0]
 
     envs.single_observation_space.dtype = np.float32
     rb = ReplayBuffer(
@@ -206,6 +219,7 @@ def main(args: Args):
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
+    best_q_value = calc_q_value(obs, controller.get_action(obs.reshape(-1)))
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -221,14 +235,25 @@ def main(args: Args):
                     .numpy()
                     .clip(envs.single_action_space.low, envs.single_action_space.high)
                 )
-
-        # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rewards, terminations, truncations, infos = envs.step(
-            np.array(actions, dtype=float)
-        )
-
+        safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
+        current_q_value = calc_q_value(obs, actions)
+        if (
+            best_q_value + critic_change_rate < current_q_value
+            or np.random.rand() < 0.05
+        ):
+            best_q_value = current_q_value
+            next_obs, rewards, terminations, truncations, infos = envs.step(
+                np.array(actions, dtype=float)
+            )
+        else:
+            next_obs, rewards, terminations, truncations, infos = envs.step(
+                np.array(safe_actions, dtype=float)
+            )
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
+            best_q_value = calc_q_value(
+                next_obs, controller.get_action(next_obs.reshape(-1))
+            )
             for info in infos["final_info"]:
                 if info is not None:
                     print(

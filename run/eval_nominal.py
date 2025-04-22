@@ -12,6 +12,9 @@ from src.envs.underwaterdrone import (
     DRONE_MASS,
     GRAVITY,
     DRAG_COEFF,
+    HOLE_WIDTH,
+    MAX_F_LONG,
+    MAX_F_LAT,
 )
 
 
@@ -59,7 +62,7 @@ class Controller:
     def reset(self) -> None:
         pass
 
-    def get_action(self, obs):
+    def get_action_lyapunov(self, obs):
         x, y, cos_theta, sin_theta, v_x, v_y, omega = obs
         alpha = 0.5
         theta = np.arctan2(sin_theta, cos_theta)
@@ -89,39 +92,32 @@ class Controller:
         F_long = a_long * (neg_b - target_luapunov) / (eps + a_long**2 + a_lat**2)
         F_lat = a_lat * (neg_b - target_luapunov) / (eps + a_long**2 + a_lat**2)
 
-        print(v_x, v_y, omega)
-        # target_theta = np.arctan((TOP_Y - y) / (eps + x))
-        # derivative_arctan = (v_y * x + (TOP_Y - y) * v_x) / (x**2 + (TOP_Y - y) ** 2)
-        # err_theta = theta - target_theta
-        # # print(
-        # #     DRONE_MASS / 2 * (v_x**2 + v_y**2)
-        # #     + DRONE_INERTIA * omega**2 / 2
-        # #     + err_theta**2 / 2
-        # # )
+        return np.array([F_long, F_lat], dtype=np.float32)
 
-        # a_long = v_x * cos_theta + v_y * sin_theta
-        # a_lat = -v_x * sin_theta + v_y * cos_theta + OFFSET_LAT * omega
-        # gain = 10.0
-        # kx = 0.1
-        # ky = 0.1
-        # k_theta = 1.0
-        # r = (
-        #     DRONE_MASS * GRAVITY * v_y
-        #     + DRAG_COEFF * (v_x**2 + v_y**2) ** 1.5
-        #     # - kx * x * v_x
-        #     # + ky * (4 - y) * v_y
-        #     - gain * (x**2 + (TOP_Y - y) ** 2)
-        #     - k_theta * err_theta * (omega - derivative_arctan)
-        # )
-        # F_long = a_long * r / (eps + a_long**2 + a_lat**2)
-        # F_lat = a_lat * r / (eps + a_long**2 + a_lat**2)
-        # # eps = 1e-6
-        # # print(a_long**2 + a_lat**2)
+    # ---------------------------------------------------------------------
+    def get_action(self, state):
+        self.kp_y = 2.0
+        self.kd_y = 1.2
+        self.kp_x = 1.5
+        self.kd_x = 0.8
+        self.target_y = TOP_Y
+        self.hole_half = 0.5 * HOLE_WIDTH
 
-        # # print(F_long, F_lat)
-        # F_long = np.clip(F_long, -self.max_f_long, self.max_f_long)
-        # F_lat = np.clip(F_lat, -self.max_f_lat, self.max_f_lat)
-        # print(F_long, F_lat)
+        x, y, cos_theta, sin_theta, v_x, v_y, _ = state
+
+        y_err = self.target_y - y
+        Fy = GRAVITY * DRONE_MASS + self.kp_y * y_err - self.kd_y * v_y  # PD‑Anteil
+
+        x_ref = 0.0
+        x_err = x_ref - x
+        Fx = self.kp_x * x_err - self.kd_x * v_x
+
+        F_long = cos_theta * Fx + sin_theta * Fy
+        F_lat = -sin_theta * Fx + cos_theta * Fy
+
+        F_long = np.clip(F_long, -MAX_F_LONG, MAX_F_LONG)
+        F_lat = np.clip(F_lat, -MAX_F_LAT, MAX_F_LAT)
+
         return np.array([F_long, F_lat], dtype=np.float32)
 
 

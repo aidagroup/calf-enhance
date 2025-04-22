@@ -5,6 +5,8 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
+    "ipykernel>=6.29.5",
+    "matplotlib>=3.10.1",
     "mlflow>=2.21.3",
     "moviepy>=2.1.2",
     "numpy>=2.2.4",

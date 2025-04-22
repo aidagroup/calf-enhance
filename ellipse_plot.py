@@ -26,9 +26,10 @@ def plot_ellipse(a=3, b=2):
     # Show grid
     ax.grid(True)
 
-    # Set fixed limits
-    ax.set_xlim(-2.5, 2.5)
-    ax.set_ylim(0, 4)
+    # Set limits with some padding
+    padding = max(a, b) * 0.5
+    ax.set_xlim(-a - padding, a + padding)
+    ax.set_ylim(2 - b - padding, 2 + b + padding)
 
     # Add labels and title
     ax.set_xlabel("x")
@@ -37,11 +38,10 @@ def plot_ellipse(a=3, b=2):
 
     # Show the plot
     plt.tight_layout()
-    plt.savefig("ellipse.png")
-    plt.close()
+    plt.show()
 
 
 if __name__ == "__main__":
     # Default values for a and b
-    a, b = 1.25, 0.8
+    a, b = 3, 2
     plot_ellipse(a, b)
