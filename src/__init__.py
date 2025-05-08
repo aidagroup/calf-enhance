@@ -8,5 +8,5 @@ RUN_PATH = REPO_PATH / "run"
 gym.register(
     id="UnderwaterDrone-v0",
     entry_point="src.envs:UnderwaterDroneEnv",
-    max_episode_steps=600,
+    max_episode_steps=1500,
 )

@@ -61,9 +61,9 @@ class UnderwaterDrone:
         self.rng = np.random.RandomState(seed)
 
         # Randomize initial state using the seeded generator
-        self.x = self.rng.uniform(-2, 2)
-        self.y = self.rng.uniform(0.3, 0.4)
-        self.theta = self.rng.uniform(np.pi / 2 - 0.1, np.pi / 2 + 0.1)
+        self.x = self.rng.uniform(-4 * MAX_X / 5, 4 * MAX_X / 5)
+        self.y = self.rng.uniform(0.0, TOP_Y / 2)
+        self.theta = self.rng.uniform(-np.pi, np.pi)
         self.v_x = self.rng.uniform(-0.2, 0.2)
         self.v_y = self.rng.uniform(-0.2, 0.2)
         self.omega = self.rng.uniform(-0.2, 0.2)
@@ -143,11 +143,21 @@ class UnderwaterDrone:
         self.y += self.v_y * dt
         self.theta += self.omega * dt
 
-        # self.x = np.clip(self.x, -MAX_X, MAX_X)
-        # self.y = np.clip(self.y, 0.0, TOP_Y)
+        self.x = np.clip(self.x, -MAX_X - 0.01, MAX_X + 0.01)
+        self.y = np.clip(self.y, 0.0 - 0.01, TOP_Y + 0.01)
 
-        if self._in_hole() or self._near_borders():
+        if self._in_hole():
             self._freeze()
+            return
+
+        if self.y < 0.0:
+            self.v_y = max(self.v_y, 0)
+        if self.y > TOP_Y:
+            self.v_y = min(self.v_y, 0)
+        if self.x < -MAX_X:
+            self.v_x = max(self.v_x, 0)
+        if self.x > MAX_X:
+            self.v_x = min(self.v_x, 0)
 
     def _in_hole(self):
         """
@@ -291,14 +301,15 @@ class UnderwaterDroneEnv(gym.Env):
     def _calculate_reward(self) -> float:
         # Simple reward: -1 if frozen, otherwise 0.01 for each step plus height bonus
         return (
-            -((self.drone.y - TOP_Y) ** 2) / 4
-            - (self.drone.x - 0.0) ** 2 / 10
-            - 0.01 * self.drone.v_x**2
-            - 0.01 * self.drone.v_y**2
+            - 0.25 * ((self.drone.y - TOP_Y) ** 2)
+            - 0.25 * (self.drone.x - 0.0) ** 2
+            - 0.05 * self.drone.v_x**2
+            - 0.05 * self.drone.v_y**2
             - 0.01 * self.drone.omega**2
+            # - 10 * (1 if self.drone._near_borders() else 0)
             # - 1 / (1 + (np.abs(self.drone.x) - MAX_X) ** 2)
             # - 1 / (1 + (self.drone.y) ** 2)
-            - 20 * (1 if self._is_in_spot() else 0)
+            # - 20 * (1 if self._is_in_spot() else 0)
         )
 
     def _get_obs(self) -> np.ndarray:

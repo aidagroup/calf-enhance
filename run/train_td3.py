@@ -74,6 +74,8 @@ class Args:
     """the frequency of training policy (delayed)"""
     noise_clip: float = 0.5
     """noise clip parameter of the Target Policy Smoothing Regularization"""
+    rolling_average_window: int = 20
+    """the rolling average window for the metrics"""
 
     def __post_init__(self):
         self.mlflow.experiment_name = (
@@ -95,7 +97,7 @@ def make_env(env_id, seed, idx, capture_video, run_name):
             env = gym.wrappers.RecordVideo(
                 env,
                 f"{RUN_PATH}/videos/{run_name}",
-                episode_trigger=lambda e: e % 20 == 0,
+                episode_trigger=lambda e: e % 5 == 0,
             )
         else:
             env = gym.make(env_id)
@@ -193,6 +195,8 @@ def main(args: Args):
     )
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
 
+    rolling_window = []
+    
     envs.single_observation_space.dtype = np.float32
     rb = ReplayBuffer(
         args.buffer_size,
@@ -236,6 +240,14 @@ def main(args: Args):
                     )
                     mlflow.log_metric(
                         "charts/episodic_return", info["episode"]["r"], global_step
+                    )
+                    rolling_window.append(info["episode"]["r"])
+                    if len(rolling_window) > args.rolling_average_window:
+                        rolling_window.pop(0)
+                    mlflow.log_metric(
+                        f"charts/episodic_return_rolling_{args.rolling_average_window}",
+                        sum(rolling_window) / len(rolling_window),
+                        global_step,
                     )
                     mlflow.log_metric(
                         "charts/episodic_length", info["episode"]["l"], global_step

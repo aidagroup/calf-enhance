@@ -15,7 +15,8 @@ from stable_baselines3.common.logger import (
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Optional
-
+import git 
+from src import REPO_PATH
 
 @dataclass
 class MlflowConfig:
@@ -80,28 +81,43 @@ def create_mlflow_logger():
     return logger
 
 
+def is_branch_exist(branch_name: str) -> bool:
+    repo = git.Repo(REPO_PATH)
+    # Check both local and remote branches
+    all_branches = [ref.name for ref in repo.references]
+    # Remove 'refs/heads/' prefix for local branches and 'refs/remotes/origin/' for remote branches
+    branch_names = [ref.replace('refs/heads/', '').replace('refs/remotes/origin/', '') for ref in all_branches]
+    return branch_name in branch_names
+
 def mlflow_monitoring():
     def inner1(func):
         def inner2(*args, **kwargs):
             mlflow_config: MlflowConfig = args[0].mlflow
             mlflow.set_tracking_uri(mlflow_config.tracking_uri)
-            if len(args) == 1 and hasattr(args[0], "notrain") and args[0].notrain:
-                return func(*args, **kwargs)
+            repo = git.Repo(REPO_PATH)
+            if is_branch_exist("experiments"):
+                repo.git.checkout("experiments")
             else:
-                mlflow.set_experiment(mlflow_config.experiment_name)
+                repo.git.checkout("-b", "experiments")
 
-                # print("run_name:", run_name)
-                with mlflow.start_run(run_name=mlflow_config.run_name):
-                    # log param
-                    if len(args):
-                        args_dict = vars(args[0])
-                        [
-                            mlflow.log_param(k, args_dict[k])
-                            for k in args_dict
-                            if k != "mlflow"
-                        ]
+            repo.git.add(all=True)
+            repo.git.commit(message="feat: auto commit")
 
-                    return func(*args, **kwargs)
+
+            mlflow.set_experiment(mlflow_config.experiment_name)
+
+            # print("run_name:", run_name)
+            with mlflow.start_run(run_name=mlflow_config.run_name):
+                # log param
+                if len(args):
+                    args_dict = vars(args[0])
+                    [
+                        mlflow.log_param(k, args_dict[k])
+                        for k in args_dict
+                        if k != "mlflow"
+                    ]
+
+                return func(*args, **kwargs)
 
         return inner2
 
