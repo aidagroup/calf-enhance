@@ -43,5 +43,5 @@ def plot_ellipse(a=3, b=2):
 
 if __name__ == "__main__":
     # Default values for a and b
-    a, b = 1.25, 0.8
+    a, b = 0.9, 0.6
     plot_ellipse(a, b)

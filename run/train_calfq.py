@@ -219,7 +219,7 @@ def main(args: Args):
 
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
-    best_q_value = calc_q_value(obs, controller.get_action(obs.reshape(-1)))
+    best_q_value = calc_q_value(obs, target_actor(torch.tensor(obs).to(device)))
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -236,7 +236,7 @@ def main(args: Args):
                     .clip(envs.single_action_space.low, envs.single_action_space.high)
                 )
         safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
-        current_q_value = calc_q_value(obs, actions)
+        current_q_value = calc_q_value(obs, target_actor(torch.tensor(obs).to(device)))
         if (
             best_q_value + critic_change_rate < current_q_value
             or np.random.rand() < 0.05
@@ -252,7 +252,7 @@ def main(args: Args):
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             best_q_value = calc_q_value(
-                next_obs, controller.get_action(next_obs.reshape(-1))
+                next_obs, target_actor(torch.tensor(next_obs).to(device))
             )
             for info in infos["final_info"]:
                 if info is not None:

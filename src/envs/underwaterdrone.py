@@ -61,7 +61,7 @@ class UnderwaterDrone:
         self.rng = np.random.RandomState(seed)
 
         # Randomize initial state using the seeded generator
-        self.x = self.rng.uniform(-0.1, 0.1)
+        self.x = self.rng.uniform(-2, 2)
         self.y = self.rng.uniform(0.3, 0.4)
         self.theta = self.rng.uniform(np.pi / 2 - 0.1, np.pi / 2 + 0.1)
         self.v_x = self.rng.uniform(-0.2, 0.2)
@@ -201,6 +201,9 @@ class UnderwaterDroneEnv(gym.Env):
             dtype=np.float32,
         )
 
+        self.semimajor_axis = 0.9
+        self.semiminor_axis = 0.6
+
         # Define action space
         # Action is (F_long, F_lat)
         self.action_space = spaces.Box(
@@ -278,20 +281,24 @@ class UnderwaterDroneEnv(gym.Env):
 
         return self._get_obs(), reward, terminated, truncated, self._get_info()
 
+    def _is_in_spot(self):
+        return (
+            self.drone.x / self.semimajor_axis**2
+            + (self.drone.y - TOP_Y / 2) ** 2 / self.semiminor_axis**2
+            <= 1.0
+        )
+
     def _calculate_reward(self) -> float:
         # Simple reward: -1 if frozen, otherwise 0.01 for each step plus height bonus
         return (
-            -((self.drone.y - TOP_Y) ** 2) / 16
-            - (self.drone.x - 0.0) ** 2 / 9
+            -((self.drone.y - TOP_Y) ** 2) / 4
+            - (self.drone.x - 0.0) ** 2 / 10
             - 0.01 * self.drone.v_x**2
             - 0.01 * self.drone.v_y**2
             - 0.01 * self.drone.omega**2
-            - 1 / (1 + (np.abs(self.drone.x) - MAX_X) ** 2)
-            - 1 / (1 + (self.drone.y) ** 2)
-            - 5
-            * np.exp(
-                (-((self.drone.x - 0.0) ** 2) - (self.drone.y - TOP_Y / 2.0) ** 2) / 0.5
-            )
+            # - 1 / (1 + (np.abs(self.drone.x) - MAX_X) ** 2)
+            # - 1 / (1 + (self.drone.y) ** 2)
+            - 20 * (1 if self._is_in_spot() else 0)
         )
 
     def _get_obs(self) -> np.ndarray:
@@ -332,7 +339,7 @@ class UnderwaterDroneEnv(gym.Env):
             self._create_heatmap()
 
     def _create_heatmap(self):
-        """Create a surface with the heatmap visualization of the Gaussian component"""
+        """Create a surface with the ellipse visualization based on _is_in_spot method"""
         if self.screen is None:
             return
 
@@ -341,64 +348,38 @@ class UnderwaterDroneEnv(gym.Env):
             (self.screen_width, self.screen_height), pygame.SRCALPHA
         )
 
-        # Number of points to sample
-        nx, ny = 100, 100
+        # Ellipse parameters
+        ellipse_center_x = 0.0
+        ellipse_center_y = TOP_Y / 2
+        ellipse_a = self.semimajor_axis  # semi-major axis
+        ellipse_b = self.semiminor_axis  # semi-minor axis
 
-        # Create coordinate grid in physics space
-        x_points = np.linspace(-MAX_X, MAX_X, nx)
-        y_points = np.linspace(0, TOP_Y, ny)
+        # Convert ellipse parameters to screen coordinates
+        ellipse_center_px = self.to_pixels_x(ellipse_center_x)
+        ellipse_center_py = self.to_pixels_y(ellipse_center_y)
+        ellipse_width = int(2 * ellipse_a * self.scale_factor)
+        ellipse_height = int(2 * ellipse_b * self.scale_factor)
 
-        # Precompute all Gaussian values for normalization
-        gaussian_vals = np.zeros((nx, ny))
-        for i, x in enumerate(x_points):
-            for j, y in enumerate(y_points):
-                gaussian_vals[i, j] = 5 * np.exp(
-                    (-((x - 0.0) ** 2) - (y - TOP_Y / 2.0) ** 2) / 0.5
-                )
+        # Calculate the rectangle that bounds the ellipse
+        ellipse_rect = pygame.Rect(
+            ellipse_center_px - ellipse_width // 2,
+            ellipse_center_py - ellipse_height // 2,
+            ellipse_width,
+            ellipse_height,
+        )
 
-        # Find max value for normalization
-        max_val = np.max(gaussian_vals)
-        if max_val > 0:
-            gaussian_vals = gaussian_vals / max_val
+        # Draw the ellipse with a semi-transparent fill
+        pygame.draw.ellipse(
+            self.heatmap_surface, (255, 0, 0, 80), ellipse_rect  # Red with alpha
+        )
 
-        # Draw the heatmap with a color gradient
-        for i, x in enumerate(x_points):
-            for j, y in enumerate(y_points):
-                # Get normalized value
-                norm_val = gaussian_vals[i, j]
-
-                # Skip very small values for performance
-                if norm_val < 0.05:
-                    continue
-
-                # Convert physics coordinates to pixel coordinates
-                px = self.to_pixels_x(x)
-                py = self.to_pixels_y(y)
-
-                # Create a color gradient from blue (cold) to red (hot)
-                # norm_val goes from 0 to 1
-                if norm_val < 0.5:
-                    # Blue to purple transition (cold)
-                    blue = 255
-                    red = int(norm_val * 2 * 255)
-                    green = 0
-                else:
-                    # Purple to red transition (hot)
-                    blue = int((1 - norm_val) * 2 * 255)
-                    red = 255
-                    green = 0
-
-                # Alpha channel based on the value
-                alpha = int(min(180, norm_val * 200))
-
-                # Draw with appropriate size based on value
-                radius = max(1, int(norm_val * 3))
-                pygame.draw.circle(
-                    self.heatmap_surface,
-                    (red, green, blue, alpha),  # RGBA with alpha
-                    (px, py),
-                    radius,
-                )
+        # Draw the ellipse outline
+        pygame.draw.ellipse(
+            self.heatmap_surface,
+            (255, 0, 0, 160),  # Red with higher alpha for the outline
+            ellipse_rect,
+            width=2,
+        )
 
     def render(self) -> Optional[np.ndarray]:
         if self.render_mode is None:
