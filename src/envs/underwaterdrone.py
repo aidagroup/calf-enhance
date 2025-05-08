@@ -301,7 +301,7 @@ class UnderwaterDroneEnv(gym.Env):
     def _calculate_reward(self) -> float:
         # Simple reward: -1 if frozen, otherwise 0.01 for each step plus height bonus
         return (
-            - 0.25 * ((self.drone.y - TOP_Y) ** 2)
+            -0.25 * ((self.drone.y - TOP_Y) ** 2)
             - 0.25 * (self.drone.x - 0.0) ** 2
             - 0.05 * self.drone.v_x**2
             - 0.05 * self.drone.v_y**2

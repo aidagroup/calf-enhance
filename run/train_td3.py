@@ -196,7 +196,7 @@ def main(args: Args):
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
 
     rolling_window = []
-    
+
     envs.single_observation_space.dtype = np.float32
     rb = ReplayBuffer(
         args.buffer_size,

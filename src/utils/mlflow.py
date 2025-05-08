@@ -15,8 +15,10 @@ from stable_baselines3.common.logger import (
 from collections import defaultdict
 from dataclasses import dataclass
 from typing import Optional
-import git 
+import git
 from src import REPO_PATH
+from loguru import logger
+
 
 @dataclass
 class MlflowConfig:
@@ -86,8 +88,12 @@ def is_branch_exist(branch_name: str) -> bool:
     # Check both local and remote branches
     all_branches = [ref.name for ref in repo.references]
     # Remove 'refs/heads/' prefix for local branches and 'refs/remotes/origin/' for remote branches
-    branch_names = [ref.replace('refs/heads/', '').replace('refs/remotes/origin/', '') for ref in all_branches]
+    branch_names = [
+        ref.replace("refs/heads/", "").replace("refs/remotes/origin/", "")
+        for ref in all_branches
+    ]
     return branch_name in branch_names
+
 
 def mlflow_monitoring():
     def inner1(func):
@@ -95,11 +101,15 @@ def mlflow_monitoring():
             mlflow_config: MlflowConfig = args[0].mlflow
             mlflow.set_tracking_uri(mlflow_config.tracking_uri)
             repo = git.Repo(REPO_PATH)
+
             if is_branch_exist("experiments"):
+                logger.info("Checking out to 'experiments' branch")
                 repo.git.checkout("experiments")
             else:
+                logger.info("Creating new branch 'experiments'")
                 repo.git.checkout("-b", "experiments")
             if repo.is_dirty():
+                logger.info("Auto committing before running")
                 repo.git.add(all=True)
                 repo.git.commit(message="feat: auto commit")
 
