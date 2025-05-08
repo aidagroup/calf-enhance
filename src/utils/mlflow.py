@@ -109,7 +109,6 @@ def mlflow_monitoring():
                 logger.info("Creating new branch 'experiments'")
                 repo.git.checkout("-b", "experiments")
             if repo.is_dirty():
-
                 logger.info("Auto committing before running")
                 repo.git.add(all=True)
                 repo.git.commit(message="feat: auto commit")
