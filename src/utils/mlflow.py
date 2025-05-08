@@ -99,10 +99,9 @@ def mlflow_monitoring():
                 repo.git.checkout("experiments")
             else:
                 repo.git.checkout("-b", "experiments")
-
-            repo.git.add(all=True)
-            repo.git.commit(message="feat: auto commit")
-
+            if repo.is_dirty():
+                repo.git.add(all=True)
+                repo.git.commit(message="feat: auto commit")
 
             mlflow.set_experiment(mlflow_config.experiment_name)
 
