@@ -61,8 +61,8 @@ class UnderwaterDrone:
         self.rng = np.random.RandomState(seed)
 
         # Randomize initial state using the seeded generator
-        self.x = self.rng.uniform(-4 * MAX_X / 5, 4 * MAX_X / 5)
-        self.y = self.rng.uniform(0.0, TOP_Y / 2)
+        self.x = self.rng.uniform(-MAX_X / 2,  MAX_X / 2)
+        self.y = self.rng.uniform(0, TOP_Y / 3)
         self.theta = self.rng.uniform(-np.pi, np.pi)
         self.v_x = self.rng.uniform(-0.2, 0.2)
         self.v_y = self.rng.uniform(-0.2, 0.2)
@@ -315,7 +315,7 @@ class UnderwaterDroneEnv(gym.Env):
             # - 10 * (1 if self.drone._near_borders() else 0)
             # - 1 / (1 + (np.abs(self.drone.x) - MAX_X) ** 2)
             # - 1 / (1 + (self.drone.y) ** 2)
-            # - 20 * (1 if self._is_in_spot() else 0)
+            - 5 * (1 if self._is_in_spot() else 0)
         )
 
     def _get_obs(self) -> np.ndarray:
