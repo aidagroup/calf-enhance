@@ -234,6 +234,8 @@ def main(args: Args):
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
+                print(info)
+                exit()
                 if info is not None:
                     print(
                         f"global_step={global_step}, episodic_return={info['episode']['r']}"
@@ -373,7 +375,6 @@ def main(args: Args):
     #         )
 
     envs.close()
-    writer.close()
 
 
 if __name__ == "__main__":

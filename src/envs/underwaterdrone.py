@@ -242,6 +242,10 @@ class UnderwaterDroneEnv(gym.Env):
         # Heatmap surface
         self.heatmap_surface = None
 
+        # Counters
+        self.n_near_borders = 0
+        self.n_in_spot = 0
+
         # Reset the environment
         self.reset()
 
@@ -258,7 +262,8 @@ class UnderwaterDroneEnv(gym.Env):
 
         # Setup for rendering
         self._setup_rendering()
-
+        self.n_near_borders = 0
+        self.n_in_spot = 0
         return self._get_obs(), self._get_info()
 
     def step(
@@ -327,7 +332,21 @@ class UnderwaterDroneEnv(gym.Env):
         )
 
     def _get_info(self) -> Dict[str, Any]:
-        return {"x": self.drone.x, "y": self.drone.y}
+        if self.drone._near_borders():
+            self.n_near_borders += 1
+        if self._is_in_spot():
+            self.n_in_spot += 1
+
+        return {
+            "x": self.drone.x,
+            "y": self.drone.y,
+            "is_frozen": self.drone.frozen,
+            "is_in_hole": self.drone._in_hole(),
+            "is_near_borders": self.drone._near_borders(),
+            "n_near_borders": self.n_near_borders,
+            "is_in_spot": self._is_in_spot(),
+            "n_in_spot": self.n_in_spot,
+        }
 
     def _setup_rendering(self):
         if self.render_mode is None:
