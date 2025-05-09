@@ -16,7 +16,7 @@ from src.utils.mlflow import mlflow_monitoring, MlflowConfig
 from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
-
+from collections import defaultdict
 
 @dataclass
 class Args:
@@ -195,7 +195,7 @@ def main(args: Args):
     )
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
 
-    rolling_window = []
+    rolling_window = defaultdict(list)
 
     envs.single_observation_space.dtype = np.float32
     rb = ReplayBuffer(
@@ -235,8 +235,6 @@ def main(args: Args):
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info is not None:
-                    print(info)
-                    exit()
 
                     print(
                         f"global_step={global_step}, episodic_return={info['episode']['r']}"
@@ -244,17 +242,61 @@ def main(args: Args):
                     mlflow.log_metric(
                         "charts/episodic_return", info["episode"]["r"], global_step
                     )
-                    rolling_window.append(info["episode"]["r"])
-                    if len(rolling_window) > args.rolling_average_window:
-                        rolling_window.pop(0)
-                    mlflow.log_metric(
-                        f"charts/episodic_return_rolling_{args.rolling_average_window}",
-                        sum(rolling_window) / len(rolling_window),
-                        global_step,
-                    )
                     mlflow.log_metric(
                         "charts/episodic_length", info["episode"]["l"], global_step
+                    )                    
+                    
+                    rolling_window["episodic_return"].append(info["episode"]["r"])
+                    if len(rolling_window["episodic_return"]) > args.rolling_average_window:
+                        rolling_window["episodic_return"].pop(0)
+                    mlflow.log_metric(
+                        f"charts/episodic_return_rolling_{args.rolling_average_window}",
+                        sum(rolling_window["episodic_return"]) / len(rolling_window["episodic_return"]),
+                        global_step,
                     )
+
+                    mlflow.log_metric(
+                        "episode_stats/n_near_borders",
+                        info["n_near_borders"] / info["episode"]["l"],
+                        global_step,
+                    )
+                    rolling_window["n_near_borders"].append(info["n_near_borders"])
+                    if len(rolling_window["n_near_borders"]) > args.rolling_average_window:
+                        rolling_window["n_near_borders"].pop(0)
+                    mlflow.log_metric(
+                        f"charts/n_near_borders_rolling_{args.rolling_average_window}",
+                        sum(rolling_window["n_near_borders"]) / len(rolling_window["n_near_borders"]),
+                        global_step,
+                    )
+                    
+                    mlflow.log_metric(
+                        "episode_stats/n_in_spot",
+                        info["n_in_spot"] / info["episode"]["l"],
+                        global_step,
+                    )
+                    rolling_window["n_in_spot"].append(info["n_in_spot"])
+                    if len(rolling_window["n_in_spot"]) > args.rolling_average_window:
+                        rolling_window["n_in_spot"].pop(0)
+                    mlflow.log_metric(
+                        f"charts/n_in_spot_rolling_{args.rolling_average_window}",
+                        sum(rolling_window["n_in_spot"]) / len(rolling_window["n_in_spot"]),
+                        global_step,
+                    )
+
+                    mlflow.log_metric(
+                        "episode_stats/is_in_hole",
+                        info["is_in_hole"],
+                        global_step,
+                    )
+                    rolling_window["is_in_hole"].append(info["is_in_hole"])
+                    if len(rolling_window["is_in_hole"]) > args.rolling_average_window:
+                        rolling_window["is_in_hole"].pop(0)
+                    mlflow.log_metric(
+                        f"charts/is_in_hole_rolling_{args.rolling_average_window}",
+                        sum(rolling_window["is_in_hole"]) / len(rolling_window["is_in_hole"]),
+                        global_step,
+                    )
+
                     break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
