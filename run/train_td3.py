@@ -278,7 +278,7 @@ def main(args: Args):
                     if len(rolling_window["n_in_spot"]) > args.rolling_average_window:
                         rolling_window["n_in_spot"].pop(0)
                     mlflow.log_metric(
-                        f"charts/n_in_spot_rolling_{args.rolling_average_window}",
+                        f"episode_stats/n_in_spot_rolling_{args.rolling_average_window}",
                         sum(rolling_window["n_in_spot"]) / len(rolling_window["n_in_spot"]),
                         global_step,
                     )
@@ -292,7 +292,7 @@ def main(args: Args):
                     if len(rolling_window["is_in_hole"]) > args.rolling_average_window:
                         rolling_window["is_in_hole"].pop(0)
                     mlflow.log_metric(
-                        f"charts/is_in_hole_rolling_{args.rolling_average_window}",
+                        f"episode_stats/is_in_hole_rolling_{args.rolling_average_window}",
                         sum(rolling_window["is_in_hole"]) / len(rolling_window["is_in_hole"]),
                         global_step,
                     )
