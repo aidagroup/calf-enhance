@@ -272,7 +272,7 @@ def main(args: Args):
                     ):
                         rolling_window["n_near_borders"].pop(0)
                     mlflow.log_metric(
-                        f"charts/n_near_borders_rolling_{args.rolling_average_window}",
+                        f"episode_stats/n_near_borders_rolling_{args.rolling_average_window}",
                         sum(rolling_window["n_near_borders"])
                         / len(rolling_window["n_near_borders"]),
                         global_step,
