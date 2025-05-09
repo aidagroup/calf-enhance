@@ -177,8 +177,9 @@ class UnderwaterDrone:
         return (
             np.abs(self.x) > MAX_X - 0.01
             or self.y < 0.0 + 0.01
-            or np.abs(self.x) > self.hole_width / 2.0 + 0.01
-            and self.y >= TOP_Y - 0.01
+            or (
+                np.abs(self.x) > self.hole_width / 2.0 + 0.01 and self.y >= TOP_Y - 0.01
+            )
         )
 
     def _freeze(self):
