@@ -63,7 +63,7 @@ class UnderwaterDrone:
         # Randomize initial state using the seeded generator
         self.x = self.rng.uniform(-MAX_X / 2,  MAX_X / 2)
         self.y = self.rng.uniform(0, TOP_Y / 3)
-        self.theta = self.rng.uniform(-np.pi, np.pi)
+        self.theta = self.rng.uniform(np.pi / 2 - np.pi / 20, np.pi / 2 + np.pi / 20)
         self.v_x = self.rng.uniform(-0.2, 0.2)
         self.v_y = self.rng.uniform(-0.2, 0.2)
         self.omega = self.rng.uniform(-0.2, 0.2)
