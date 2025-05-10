@@ -209,7 +209,7 @@ def main(args: Args):
     )
     start_time = time.time()
 
-    critic_change_rate = 0.1
+    critic_change_rate = 1.0
     p_relax_init = p_relax = 0.8
     p_relax_decay = 0.99
 
@@ -241,7 +241,6 @@ def main(args: Args):
                     .numpy()
                     .clip(envs.single_action_space.low, envs.single_action_space.high)
                 )
-
 
         current_q_value = calc_q_value(obs, actions)
         if (
