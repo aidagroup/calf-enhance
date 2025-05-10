@@ -243,20 +243,25 @@ def main(args: Args):
                 )
 
         current_q_value = calc_q_value(obs, actions)
-        if (
-            best_q_value + critic_change_rate < current_q_value
-            or np.random.rand() < p_relax 
-        ):
-            if best_q_value + critic_change_rate < current_q_value:
-                best_q_value = current_q_value
-            next_obs, rewards, terminations, truncations, infos = envs.step(
-                np.array(actions, dtype=float)
-            )
-        else:
-            safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
-            next_obs, rewards, terminations, truncations, infos = envs.step(
-                np.array(safe_actions, dtype=float)
-            )
+        # if (
+        #     best_q_value + critic_change_rate < current_q_value
+        #     or np.random.rand() < p_relax 
+        # ):
+        #     if best_q_value + critic_change_rate < current_q_value:
+        #         best_q_value = current_q_value
+        #     next_obs, rewards, terminations, truncations, infos = envs.step(
+        #         np.array(actions, dtype=float)
+        #     )
+        # else:
+        #     safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
+        #     next_obs, rewards, terminations, truncations, infos = envs.step(
+        #         np.array(safe_actions, dtype=float)
+        #     )
+
+        safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
+        next_obs, rewards, terminations, truncations, infos = envs.step(
+            np.array(safe_actions, dtype=float)
+        )
         p_relax *= p_relax_decay
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(
