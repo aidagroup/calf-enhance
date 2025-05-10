@@ -209,9 +209,9 @@ def main(args: Args):
     )
     start_time = time.time()
 
-    critic_change_rate = 1.0
+    critic_change_rate = 0.1
     p_relax_init = p_relax = 0.8
-    p_relax_decay = 0.99
+    p_relax_decay = 0.993
 
     def calc_q_value(obs, action):
         torch_obs = torch.tensor(obs).to(device).reshape(1, -1)
