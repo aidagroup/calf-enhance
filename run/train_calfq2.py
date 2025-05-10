@@ -222,7 +222,7 @@ def main(args: Args):
                 qf2_target(torch_obs, torch_action),
             )
             return q_value.cpu().numpy()[0, 0]
-
+    controller = Controller()
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
     best_q_value = -np.inf
@@ -242,8 +242,7 @@ def main(args: Args):
                     .clip(envs.single_action_space.low, envs.single_action_space.high)
                 )
 
-        controller = Controller()
-        safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
+
         current_q_value = calc_q_value(obs, actions)
         if (
             best_q_value + critic_change_rate < current_q_value
@@ -255,6 +254,7 @@ def main(args: Args):
                 np.array(actions, dtype=float)
             )
         else:
+            safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
             next_obs, rewards, terminations, truncations, infos = envs.step(
                 np.array(safe_actions, dtype=float)
             )
