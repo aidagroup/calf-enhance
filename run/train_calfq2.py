@@ -264,9 +264,9 @@ def main(args: Args):
         )
         p_relax *= p_relax_decay
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rewards, terminations, truncations, infos = envs.step(
-            np.array(actions, dtype=float)
-        )
+        # next_obs, rewards, terminations, truncations, infos = envs.step(
+        #     np.array(actions, dtype=float)
+        # )
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
