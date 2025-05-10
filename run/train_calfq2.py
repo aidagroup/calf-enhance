@@ -244,7 +244,7 @@ def main(args: Args):
 
         controller = Controller()
         safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
-        current_q_value = calc_q_value(obs, target_actor(torch.tensor(obs).to(device)))
+        current_q_value = calc_q_value(obs, actions)
         if (
             best_q_value + critic_change_rate < current_q_value
             or np.random.rand() < p_relax 
