@@ -97,7 +97,8 @@ def make_env(env_id, seed, idx, capture_video, run_name):
             env = gym.make(env_id, render_mode="rgb_array")
             env = gym.wrappers.RecordVideo(
                 env,
-                f"{RUN_PATH}/videos/{run_name}",
+                # f"{RUN_PATH}/videos/{run_name}",
+                mlflow.get_artifact_uri()[len("file://") :] + "/videos/" + run_name,
                 episode_trigger=lambda e: e % 5 == 0,
             )
         else:
