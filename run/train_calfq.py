@@ -17,7 +17,8 @@ from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
 from collections import defaultdict
-from run.eval_nominal import Controller
+from src.controller import UnderwaterDroneNominalController
+
 
 @dataclass
 class Args:
@@ -77,6 +78,14 @@ class Args:
     """noise clip parameter of the Target Policy Smoothing Regularization"""
     rolling_average_window: int = 20
     """the rolling average window for the metrics"""
+
+    # Calfq specific arguments
+    calfq_critic_improvement_threshold: float = 0.01
+    """the threshold for the critic improvement"""
+    calfq_p_relax_init: float = 0.8
+    """the initial value of the p_relax parameter"""
+    calfq_p_relax_decay: float = 0.995
+    """the decay rate of the p_relax parameter"""
 
     def __post_init__(self):
         self.mlflow.experiment_name = (
@@ -160,6 +169,8 @@ class Actor(nn.Module):
 
 @mlflow_monitoring()
 def main(args: Args):
+    mlflow.set_tag("videos_path", f"{RUN_PATH}/videos/{args.mlflow.run_name}")
+
     # TRY NOT TO MODIFY: seeding
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -167,8 +178,6 @@ def main(args: Args):
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
-    mlflow.set_tag("videos_path", f"{RUN_PATH}/videos/{args.mlflow.run_name}")
-
     # env setup
     envs = gym.vector.SyncVectorEnv(
         [
@@ -208,25 +217,29 @@ def main(args: Args):
         n_envs=args.num_envs,
         handle_timeout_termination=False,
     )
-    start_time = time.time()
 
-    critic_change_rate = 0.01
-    p_relax_init = p_relax = 0.8
-    p_relax_decay = 0.995
-
-    def calc_q_value(obs, action):
-        torch_obs = torch.tensor(obs).to(device).reshape(1, -1)
-        torch_action = torch.tensor(action).to(device).reshape(1, -1)
+    def q_values(obs, actions):
+        torch_obs, torch_actions = (
+            torch.tensor(obs, device=device),
+            torch.tensor(actions, device=device),
+        )
         with torch.no_grad():
-            q_value = torch.min(
-                qf1_target(torch_obs, torch_action),
-                qf2_target(torch_obs, torch_action),
+            torch_q_values = torch.min(
+                qf1_target(torch_obs, torch_actions),
+                qf2_target(torch_obs, torch_actions),
             )
-            return q_value.cpu().numpy()[0, 0]
-    controller = Controller()
+            return torch_q_values.cpu().numpy()
+
+    if args.env_id.startswith("UnderwaterDrone"):
+        controller = UnderwaterDroneNominalController()
+    else:
+        raise ValueError(f"Environment {args.env_id} not supported")
+
+    start_time = time.time()
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
-    best_q_value = -np.inf
+    best_q_values = np.full(shape=(envs.num_envs, 1), fill_value=-np.inf)
+    relax_probs = np.full(shape=(envs.num_envs, 1), fill_value=args.calfq_p_relax_init)
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -243,31 +256,30 @@ def main(args: Args):
                     .clip(envs.single_action_space.low, envs.single_action_space.high)
                 )
 
-        current_q_value = calc_q_value(obs, actions)
-        if (
-            best_q_value + critic_change_rate < current_q_value
-            or np.random.rand() < p_relax 
-        ):
-            if best_q_value + critic_change_rate < current_q_value:
-                best_q_value = current_q_value
-            next_obs, rewards, terminations, truncations, infos = envs.step(
-                np.array(actions, dtype=float)
-            )
-        else:
-            safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
-            next_obs, rewards, terminations, truncations, infos = envs.step(
-                np.array(safe_actions, dtype=float)
-            )
+        current_q_values = q_values(obs, actions)
+        is_q_values_improved = (
+            current_q_values > best_q_values + args.calfq_critic_improvement_threshold
+        )
+        safe_actions = controller.get_action(obs)
+        current_actions = np.where(
+            np.logical_or(
+                is_q_values_improved,
+                np.random.rand(*relax_probs.shape) < relax_probs,
+            ),
+            actions,
+            safe_actions,
+        )
+        relax_probs *= args.calfq_p_relax_decay
 
-        # safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
-        # next_obs, rewards, terminations, truncations, infos = envs.step(
-        #     np.array(safe_actions, dtype=float)
-        # )
-        p_relax *= p_relax_decay
-        # TRY NOT TO MODIFY: execute the game and log data.
-        # next_obs, rewards, terminations, truncations, infos = envs.step(
-        #     np.array(actions, dtype=float)
-        # )
+        next_obs, rewards, terminations, truncations, infos = envs.step(
+            np.array(current_actions, dtype=float)
+        )
+
+        best_q_values = np.where(
+            is_q_values_improved,
+            current_q_values,
+            best_q_values,
+        )
 
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
@@ -344,16 +356,18 @@ def main(args: Args):
                         / len(rolling_window["is_in_hole"]),
                         global_step,
                     )
-
-                    best_q_value = -np.inf
-                    p_relax = p_relax_init
                     break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
-        for idx, trunc in enumerate(truncations):
+        for idx, (trunc, term) in enumerate(zip(truncations, terminations)):
             if trunc:
                 real_next_obs[idx] = infos["final_observation"][idx]
+
+            if trunc or term:
+                best_q_values[idx, 0] = -np.inf
+                relax_probs[idx, 0] = args.calfq_p_relax_init
+
         rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook

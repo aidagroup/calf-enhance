@@ -4,22 +4,6 @@ from gymnasium import spaces
 import pygame
 from typing import Optional, Tuple, Dict, Any
 
-# TIME_STEP_SIZE = 0.02
-# DRONE_MASS = 1.0
-# DRONE_INERTIA = 0.1
-# DRONE_RADIUS = 0.2
-# DRAG_COEFF = 0.05
-# OFFSET_LAT = 0.2
-# MAX_F_LONG = 3.0
-# MAX_F_LAT = 3.0
-# GRAVITY = 0.5
-# TOP_Y = 4.0
-# HOLE_WIDTH = 4.0 * DRONE_RADIUS
-# MAX_X = 2.5
-# MAX_V = 3.0
-# MAX_OMEGA = 5.0
-
-
 TIME_STEP_SIZE = 0.02
 DRONE_MASS = 1.0
 DRONE_INERTIA = 0.1
@@ -40,12 +24,6 @@ class UnderwaterDrone:
     def __init__(
         self,
         seed=None,
-        x=0.0,
-        y=0.0,
-        theta=0.0,
-        v_x=0.0,
-        v_y=0.0,
-        omega=0.0,
         m=DRONE_MASS,
         I=DRONE_INERTIA,
         Cd=DRAG_COEFF,
@@ -61,7 +39,7 @@ class UnderwaterDrone:
         self.rng = np.random.RandomState(seed)
 
         # Randomize initial state using the seeded generator
-        self.x = self.rng.uniform(-MAX_X / 2,  MAX_X / 2)
+        self.x = self.rng.uniform(-MAX_X / 2, MAX_X / 2)
         self.y = self.rng.uniform(0, TOP_Y / 3)
         self.theta = self.rng.uniform(np.pi / 2 - np.pi / 20, np.pi / 2 + np.pi / 20)
         self.v_x = self.rng.uniform(-0.2, 0.2)
@@ -279,20 +257,7 @@ class UnderwaterDroneEnv(gym.Env):
         # Calculate reward
         reward = self._calculate_reward()
 
-        # Check if episode is terminated
-        # eps = 0.05
-        # terminated = (
-        #     np.abs(self.drone.x) > MAX_X - eps
-        #     or self.drone.y < 0.0 + eps
-        #     or (
-        #         np.abs(self.drone.x) > HOLE_WIDTH / 2 + eps
-        #         and self.drone.y > TOP_Y - eps
-        #     )
-        #     or np.linalg.norm(np.array([self.drone.v_x, self.drone.v_y]), ord=2) > MAX_V
-        #     or np.abs(self.drone.omega) > MAX_OMEGA
-        # )
         terminated = False
-        # Check if episode is truncated (not used here)
         truncated = False
 
         return self._get_obs(), reward, terminated, truncated, self._get_info()
@@ -312,9 +277,6 @@ class UnderwaterDroneEnv(gym.Env):
             - 0.05 * self.drone.v_x**2
             - 0.05 * self.drone.v_y**2
             - 0.01 * self.drone.omega**2
-            # - 10 * (1 if self.drone._near_borders() else 0)
-            # - 1 / (1 + (np.abs(self.drone.x) - MAX_X) ** 2)
-            # - 1 / (1 + (self.drone.y) ** 2)
             - 5 * (1 if self._is_in_spot() else 0)
         )
 
