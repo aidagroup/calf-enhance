@@ -240,6 +240,7 @@ def main(args: Args):
     obs, _ = envs.reset(seed=args.seed)
     best_q_values = np.full(shape=(envs.num_envs, 1), fill_value=-np.inf)
     relax_probs = np.full(shape=(envs.num_envs, 1), fill_value=args.calfq_p_relax_init)
+    n_safe_actions = np.zeros(shape=(envs.num_envs, 1))
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -270,7 +271,11 @@ def main(args: Args):
             safe_actions,
         )
         relax_probs *= args.calfq_p_relax_decay
-
+        n_safe_actions += np.logical_or(
+            is_q_values_improved,
+            np.random.rand(*relax_probs.shape) < relax_probs,
+        )
+        
         next_obs, rewards, terminations, truncations, infos = envs.step(
             np.array(current_actions, dtype=float)
         )
@@ -356,8 +361,21 @@ def main(args: Args):
                         / len(rolling_window["is_in_hole"]),
                         global_step,
                     )
-                    break
 
+                    mlflow.log_metric(
+                        "episode_stats/n_safe_actions",
+                        np.mean(n_safe_actions) / info["episode"]["l"],
+                        global_step,
+                    )
+                    rolling_window["n_safe_actions"].append(np.mean(n_safe_actions))
+                    if len(rolling_window["n_safe_actions"]) > args.rolling_average_window:
+                        rolling_window["n_safe_actions"].pop(0)
+                    mlflow.log_metric(
+                        f"episode_stats/n_safe_actions_rolling_{args.rolling_average_window}",
+                        sum(rolling_window["n_safe_actions"])
+                        / len(rolling_window["n_safe_actions"]),
+                        global_step,
+                    )
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
         for idx, (trunc, term) in enumerate(zip(truncations, terminations)):
@@ -367,6 +385,7 @@ def main(args: Args):
             if trunc or term:
                 best_q_values[idx, 0] = -np.inf
                 relax_probs[idx, 0] = args.calfq_p_relax_init
+                n_safe_actions[idx, 0] = 0
 
         rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
