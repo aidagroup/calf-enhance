@@ -202,8 +202,8 @@ class UnderwaterDroneEnv(gym.Env):
         # Define action space
         # Action is (F_long, F_lat)
         self.action_space = spaces.Box(
-            low=np.array([-MAX_F_LONG, -MAX_F_LAT]),
-            high=np.array([MAX_F_LONG, MAX_F_LAT]),
+            low=np.array([-MAX_F_LONG, -MAX_F_LAT], dtype=np.float32),
+            high=np.array([MAX_F_LONG, MAX_F_LAT], dtype=np.float32),
             dtype=np.float32,
         )
 
