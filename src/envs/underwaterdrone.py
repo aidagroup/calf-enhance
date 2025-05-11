@@ -247,7 +247,7 @@ class UnderwaterDroneEnv(gym.Env):
 
         if seed is not None:
             self.drone = UnderwaterDrone(seed=seed)
-        elif self.seed is not None:
+        elif self.rng is not None:
             self.drone = UnderwaterDrone(random_generator=self.rng)
         else:
             self.drone = UnderwaterDrone()
