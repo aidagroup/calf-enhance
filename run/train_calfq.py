@@ -259,7 +259,7 @@ def main(args: Args):
             safe_actions,
         )
         relax_probs *= args.calfq_p_relax_decay
-        n_safe_actions += np.logical_or(
+        n_safe_actions += ~np.logical_or(
             is_q_values_improved,
             np.random.rand(*relax_probs.shape) < relax_probs,
         )
