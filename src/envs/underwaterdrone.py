@@ -226,7 +226,7 @@ class UnderwaterDroneEnv(gym.Env):
         # Counters
         self.n_near_borders = 0
         self.n_in_spot = 0
-
+        self.n_resets = 0
         # Reset the environment
         self.reset(seed=seed)
 
@@ -234,11 +234,12 @@ class UnderwaterDroneEnv(gym.Env):
         self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
+        self.n_resets += 1
 
         if seed is not None:
             self.drone = UnderwaterDrone(seed=seed)
         elif self.seed is not None:
-            self.drone = UnderwaterDrone(seed=self.seed)
+            self.drone = UnderwaterDrone(seed=self.seed + self.n_resets * 10)
         else:
             self.drone = UnderwaterDrone()
 
