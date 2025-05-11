@@ -186,8 +186,13 @@ class UnderwaterDroneEnv(gym.Env):
         # Define observation space
         # State is (x, y, theta, v_x, v_y, omega)
         self.observation_space = spaces.Box(
-            low=np.array([-np.inf, -np.inf, -1, -1, -np.inf, -np.inf, -np.inf], dtype=np.float32),
-            high=np.array([np.inf, np.inf, 1, 1, np.inf, np.inf, np.inf], dtype=np.float32),
+            low=np.array(
+                [-np.inf, -np.inf, -1, -1, -np.inf, -np.inf, -np.inf], dtype=np.float32
+            ),
+            high=np.array(
+                [np.inf, np.inf, 1, 1, np.inf, np.inf, np.inf], dtype=np.float32
+            ),
+            dtype=np.float32,
         )
         self.seed = seed
 
