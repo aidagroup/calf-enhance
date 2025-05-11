@@ -24,6 +24,7 @@ class UnderwaterDrone:
     def __init__(
         self,
         seed=None,
+        random_generator=None,
         m=DRONE_MASS,
         I=DRONE_INERTIA,
         Cd=DRAG_COEFF,
@@ -36,8 +37,12 @@ class UnderwaterDrone:
         hole_width=HOLE_WIDTH,
     ):
         # Initialize random state generator with seed
-        self.seed = seed
-        self.rng = np.random.RandomState(seed)
+        if seed is not None:
+            self.rng = np.random.RandomState(seed)
+        elif random_generator is None:
+            self.rng = np.random.RandomState()
+        else:
+            self.rng = random_generator
 
         # Randomize initial state using the seeded generator
         self.x = self.rng.uniform(-MAX_X / 2, MAX_X / 2)
@@ -194,7 +199,7 @@ class UnderwaterDroneEnv(gym.Env):
             ),
             dtype=np.float32,
         )
-        self.seed = seed
+        self.rng = np.random.RandomState(seed)
 
         self.semimajor_axis = 0.9
         self.semiminor_axis = 0.6
@@ -243,7 +248,7 @@ class UnderwaterDroneEnv(gym.Env):
         if seed is not None:
             self.drone = UnderwaterDrone(seed=seed)
         elif self.seed is not None:
-            self.drone = UnderwaterDrone(seed=self.seed + self.n_resets * 10)
+            self.drone = UnderwaterDrone(random_generator=self.rng)
         else:
             self.drone = UnderwaterDrone()
 
