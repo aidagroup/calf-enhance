@@ -237,7 +237,7 @@ class UnderwaterDroneEnv(gym.Env):
         self.n_in_spot = 0
         self.n_resets = 0
         # Reset the environment
-        self.reset(seed=seed)
+        self.reset()
 
     def reset(
         self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None
