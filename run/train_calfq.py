@@ -16,8 +16,8 @@ from src.utils.mlflow import mlflow_monitoring, MlflowConfig
 from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
+from collections import defaultdict
 from run.eval_nominal import Controller
-
 
 @dataclass
 class Args:
@@ -49,7 +49,7 @@ class Args:
     """the user or org name of the model repository from the Hugging Face Hub"""
 
     # Algorithm specific arguments
-    env_id: str = "Pendulum-v1"
+    env_id: str = "Hopper-v4"
     """the id of the environment"""
     total_timesteps: int = 1000000
     """total timesteps of the experiments"""
@@ -75,6 +75,8 @@ class Args:
     """the frequency of training policy (delayed)"""
     noise_clip: float = 0.5
     """noise clip parameter of the Target Policy Smoothing Regularization"""
+    rolling_average_window: int = 20
+    """the rolling average window for the metrics"""
 
     def __post_init__(self):
         self.mlflow.experiment_name = (
@@ -95,9 +97,8 @@ def make_env(env_id, seed, idx, capture_video, run_name):
             env = gym.make(env_id, render_mode="rgb_array")
             env = gym.wrappers.RecordVideo(
                 env,
-                # f"{RUN_PATH}/videos/{run_name}",
-                mlflow.get_artifact_uri()[len("file://") :] + "/videos/" + run_name,
-                episode_trigger=lambda e: e % 20 == 0,
+                f"{RUN_PATH}/videos/{run_name}",
+                episode_trigger=lambda e: e % 5 == 0,
             )
         else:
             env = gym.make(env_id)
@@ -166,6 +167,7 @@ def main(args: Args):
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    mlflow.set_tag("videos_path", f"{RUN_PATH}/videos/{args.mlflow.run_name}")
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
@@ -194,18 +196,8 @@ def main(args: Args):
         list(qf1.parameters()) + list(qf2.parameters()), lr=args.learning_rate
     )
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
-    controller = Controller()
-    critic_change_rate = 0.01
 
-    def calc_q_value(obs, action):
-        torch_obs = torch.tensor(obs).to(device).reshape(1, -1)
-        torch_action = torch.tensor(action).to(device).reshape(1, -1)
-        with torch.no_grad():
-            q_value = torch.min(
-                qf1_target(torch_obs, torch_action),
-                qf2_target(torch_obs, torch_action),
-            )
-            return q_value.cpu().numpy()[0, 0]
+    rolling_window = defaultdict(list)
 
     envs.single_observation_space.dtype = np.float32
     rb = ReplayBuffer(
@@ -218,9 +210,23 @@ def main(args: Args):
     )
     start_time = time.time()
 
+    critic_change_rate = 0.01
+    p_relax_init = p_relax = 0.8
+    p_relax_decay = 0.995
+
+    def calc_q_value(obs, action):
+        torch_obs = torch.tensor(obs).to(device).reshape(1, -1)
+        torch_action = torch.tensor(action).to(device).reshape(1, -1)
+        with torch.no_grad():
+            q_value = torch.min(
+                qf1_target(torch_obs, torch_action),
+                qf2_target(torch_obs, torch_action),
+            )
+            return q_value.cpu().numpy()[0, 0]
+    controller = Controller()
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
-    best_q_value = calc_q_value(obs, target_actor(torch.tensor(obs).to(device)))
+    best_q_value = -np.inf
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -236,27 +242,38 @@ def main(args: Args):
                     .numpy()
                     .clip(envs.single_action_space.low, envs.single_action_space.high)
                 )
-        safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
-        current_q_value = calc_q_value(obs, target_actor(torch.tensor(obs).to(device)))
+
+        current_q_value = calc_q_value(obs, actions)
         if (
             best_q_value + critic_change_rate < current_q_value
-            or np.random.rand() < 0.05
+            or np.random.rand() < p_relax 
         ):
-            best_q_value = current_q_value
+            if best_q_value + critic_change_rate < current_q_value:
+                best_q_value = current_q_value
             next_obs, rewards, terminations, truncations, infos = envs.step(
                 np.array(actions, dtype=float)
             )
         else:
+            safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
             next_obs, rewards, terminations, truncations, infos = envs.step(
                 np.array(safe_actions, dtype=float)
             )
+
+        # safe_actions = controller.get_action(obs.reshape(-1)).reshape(1, -1)
+        # next_obs, rewards, terminations, truncations, infos = envs.step(
+        #     np.array(safe_actions, dtype=float)
+        # )
+        p_relax *= p_relax_decay
+        # TRY NOT TO MODIFY: execute the game and log data.
+        # next_obs, rewards, terminations, truncations, infos = envs.step(
+        #     np.array(actions, dtype=float)
+        # )
+
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
-            best_q_value = calc_q_value(
-                next_obs, target_actor(torch.tensor(next_obs).to(device))
-            )
             for info in infos["final_info"]:
                 if info is not None:
+
                     print(
                         f"global_step={global_step}, episodic_return={info['episode']['r']}"
                     )
@@ -266,6 +283,70 @@ def main(args: Args):
                     mlflow.log_metric(
                         "charts/episodic_length", info["episode"]["l"], global_step
                     )
+
+                    rolling_window["episodic_return"].append(info["episode"]["r"])
+                    if (
+                        len(rolling_window["episodic_return"])
+                        > args.rolling_average_window
+                    ):
+                        rolling_window["episodic_return"].pop(0)
+                    mlflow.log_metric(
+                        f"charts/episodic_return_rolling_{args.rolling_average_window}",
+                        sum(rolling_window["episodic_return"])
+                        / len(rolling_window["episodic_return"]),
+                        global_step,
+                    )
+
+                    mlflow.log_metric(
+                        "episode_stats/n_near_borders",
+                        info["n_near_borders"] / info["episode"]["l"],
+                        global_step,
+                    )
+                    rolling_window["n_near_borders"].append(info["n_near_borders"])
+                    if (
+                        len(rolling_window["n_near_borders"])
+                        > args.rolling_average_window
+                    ):
+                        rolling_window["n_near_borders"].pop(0)
+                    mlflow.log_metric(
+                        f"episode_stats/n_near_borders_rolling_{args.rolling_average_window}",
+                        sum(rolling_window["n_near_borders"])
+                        / len(rolling_window["n_near_borders"]),
+                        global_step,
+                    )
+
+                    mlflow.log_metric(
+                        "episode_stats/n_in_spot",
+                        info["n_in_spot"] / info["episode"]["l"],
+                        global_step,
+                    )
+                    rolling_window["n_in_spot"].append(info["n_in_spot"])
+                    if len(rolling_window["n_in_spot"]) > args.rolling_average_window:
+                        rolling_window["n_in_spot"].pop(0)
+                    mlflow.log_metric(
+                        f"episode_stats/n_in_spot_rolling_{args.rolling_average_window}",
+                        sum(rolling_window["n_in_spot"])
+                        / len(rolling_window["n_in_spot"]),
+                        global_step,
+                    )
+
+                    mlflow.log_metric(
+                        "episode_stats/is_in_hole",
+                        info["is_in_hole"],
+                        global_step,
+                    )
+                    rolling_window["is_in_hole"].append(info["is_in_hole"])
+                    if len(rolling_window["is_in_hole"]) > args.rolling_average_window:
+                        rolling_window["is_in_hole"].pop(0)
+                    mlflow.log_metric(
+                        f"episode_stats/is_in_hole_rolling_{args.rolling_average_window}",
+                        sum(rolling_window["is_in_hole"])
+                        / len(rolling_window["is_in_hole"]),
+                        global_step,
+                    )
+
+                    best_q_value = -np.inf
+                    p_relax = p_relax_init
                     break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
@@ -387,7 +468,6 @@ def main(args: Args):
     #         )
 
     envs.close()
-    writer.close()
 
 
 if __name__ == "__main__":

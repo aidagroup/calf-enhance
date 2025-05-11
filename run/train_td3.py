@@ -165,6 +165,7 @@ def main(args: Args):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
+    mlflow.set_tag("videos_path", f"{RUN_PATH}/videos/{args.mlflow.run_name}")
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
 
