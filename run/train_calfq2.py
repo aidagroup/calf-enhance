@@ -3,8 +3,6 @@ import os
 import random
 import time
 from dataclasses import dataclass, field
-import subprocess
-from pathlib import Path
 
 import gymnasium as gym
 import numpy as np
@@ -93,45 +91,15 @@ class Args:
         )
 
 
-def convert_mp4_to_gif(mp4_path):
-    """Convert an MP4 video to GIF format using ffmpeg."""
-    gif_path = mp4_path.replace('.mp4', '.gif')
-    try:
-        # Use ffmpeg to convert MP4 to GIF with reasonable quality
-        subprocess.call([
-            'ffmpeg', '-i', mp4_path, 
-            '-vf', 'fps=10,scale=320:-1:flags=lanczos,split[s0][s1];[s0]palettegen[p];[s1][p]paletteuse',
-            '-loop', '0', gif_path
-        ])
-        print(f"Converted {mp4_path} to {gif_path}")
-        return gif_path
-    except Exception as e:
-        print(f"Error converting MP4 to GIF: {e}")
-        return None
-
-
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
             env = gym.make(env_id, render_mode="rgb_array")
-            videos_dir = mlflow.get_artifact_uri()[len("file://") :] + "/videos/"
             env = gym.wrappers.RecordVideo(
                 env,
-                videos_dir,
+                f"{RUN_PATH}/videos/{run_name}",
                 episode_trigger=lambda e: e % 5 == 0,
             )
-            
-            # Register a callback to convert MP4s to GIFs after episode ends
-            original_close_video_recorder = env.close_video_recorder
-            
-            def patched_close_recorder():
-                original_close_video_recorder()
-                if hasattr(env, 'video_recorder') and env.video_recorder is not None:
-                    video_path = env.video_recorder.path
-                    if video_path and os.path.exists(video_path):
-                        convert_mp4_to_gif(video_path)
-            
-            env.close_video_recorder = patched_close_recorder
         else:
             env = gym.make(env_id)
         env = gym.wrappers.RecordEpisodeStatistics(env)
@@ -199,6 +167,7 @@ def main(args: Args):
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
     device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    mlflow.set_tag("videos_path", f"{RUN_PATH}/videos/{args.mlflow.run_name}")
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
