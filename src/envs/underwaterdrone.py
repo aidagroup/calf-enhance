@@ -36,6 +36,7 @@ class UnderwaterDrone:
         hole_width=HOLE_WIDTH,
     ):
         # Initialize random state generator with seed
+        self.seed = seed
         self.rng = np.random.RandomState(seed)
 
         # Randomize initial state using the seeded generator
@@ -189,6 +190,7 @@ class UnderwaterDroneEnv(gym.Env):
             high=np.array([np.inf, np.inf, 1, 1, np.inf, np.inf, np.inf]),
             dtype=np.float32,
         )
+        self.seed = seed
 
         self.semimajor_axis = 0.9
         self.semiminor_axis = 0.6
@@ -233,8 +235,12 @@ class UnderwaterDroneEnv(gym.Env):
     ) -> Tuple[np.ndarray, Dict[str, Any]]:
         super().reset(seed=seed)
 
-        # Create a new drone with the same seed
-        self.drone = UnderwaterDrone(seed=seed)
+        if seed is not None:
+            self.drone = UnderwaterDrone(seed=seed)
+        elif self.seed is not None:
+            self.drone = UnderwaterDrone(seed=self.seed)
+        else:
+            self.drone = UnderwaterDrone()
 
         # Clear trajectory history
         self.trajectory = []
