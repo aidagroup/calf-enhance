@@ -3,7 +3,7 @@ import os
 import random
 import time
 from dataclasses import dataclass, field
-
+from scipy.optimize import root_scalar
 import gymnasium as gym
 import numpy as np
 import torch
@@ -76,6 +76,8 @@ class Args:
     """the decay rate of the p_relax parameter"""
     calfq_anneal: bool = True
     """if toggled, the p_relax and p_relax_decay parameters will be annealed"""
+    calfq_anneal_frac: float = 0.9
+    """the fraction of the total timesteps to anneal the p_relax and p_relax_decay parameters"""
 
     def __post_init__(self):
         self.mlflow.experiment_name = (
@@ -232,6 +234,8 @@ def main(args: Args):
     relax_probs = np.full(shape=(envs.num_envs, 1), fill_value=args.calfq_p_relax_init)
     p_relax_decay = args.calfq_p_relax_decay
     n_safe_actions = np.zeros(shape=(envs.num_envs, 1))
+    rolling_episode_lengths = []
+
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -371,19 +375,11 @@ def main(args: Args):
                         / len(rolling_window["n_safe_actions"]),
                         global_step,
                     )
-                    mlflow.log_metric(
-                        "calfq/p_relax",
-                        args.calfq_p_relax_init
-                        + args.calfq_anneal
-                        * (1.0 - args.calfq_p_relax_init)
-                        * (global_step / args.total_timesteps),
-                        global_step,
-                    )
-                    mlflow.log_metric(
-                        "calfq/p_relax_decay",
-                        p_relax_decay,
-                        global_step,
-                    )
+
+                    rolling_episode_lengths.append(info["episode"]["l"])
+                    if len(rolling_episode_lengths) > args.rolling_average_window:
+                        rolling_episode_lengths.pop(0)
+                    break
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
         for idx, (trunc, term) in enumerate(zip(truncations, terminations)):
@@ -392,13 +388,45 @@ def main(args: Args):
 
             if trunc or term:
                 best_q_values[idx, 0] = -np.inf
-                relax_probs[idx, 0] = args.calfq_p_relax_init + args.calfq_anneal * (
-                    1.0 - args.calfq_p_relax_init
-                ) * (global_step / args.total_timesteps)
                 n_safe_actions[idx, 0] = 0
-                p_relax_decay = args.calfq_p_relax_decay + args.calfq_anneal * (
-                    1 - args.calfq_p_relax_decay
-                ) * (global_step / args.total_timesteps)
+
+                if args.calfq_anneal:
+                    frac = np.clip(
+                        global_step / (args.total_timesteps * args.calfq_anneal_frac),
+                        0.0,
+                        1.0,
+                    )
+                    relax_probs[idx, 0] = (
+                        args.calfq_p_relax_init + (1.0 - args.calfq_p_relax_init) * frac
+                    )
+                    episode_len = sum(rolling_episode_lengths) / len(
+                        rolling_episode_lengths
+                    )
+                    reference_init = sum(
+                        args.calfq_p_relax_init
+                        * args.calfq_p_relax_decay ** np.arange(episode_len)
+                    )
+                    reference = reference_init + (episode_len - reference_init) * frac
+                    p_relax_decay = root_scalar(
+                        lambda x: sum(x**t for t in range(episode_len))
+                        - reference / relax_probs[idx, 0],
+                        bracket=[0.0, 1.0],
+                        method="brentq",
+                    ).root
+                else:
+                    relax_probs[idx, 0] = args.calfq_p_relax_init
+                    p_relax_decay = args.calfq_p_relax_decay
+
+                mlflow.log_metric(
+                    "calfq/p_relax",
+                    relax_probs[idx, 0],
+                    global_step,
+                )
+                mlflow.log_metric(
+                    "calfq/p_relax_decay",
+                    p_relax_decay,
+                    global_step,
+                )
 
         if np.any(~safe_actions_mask):
             rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
