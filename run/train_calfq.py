@@ -370,6 +370,19 @@ def main(args: Args):
                         / len(rolling_window["n_safe_actions"]),
                         global_step,
                     )
+                    mlflow.log_metric(
+                        "calfq/p_relax",
+                        args.calfq_p_relax_init
+                        + args.calfq_anneal
+                        * (1.0 - args.calfq_p_relax_init)
+                        * (global_step / args.total_timesteps),
+                        global_step,
+                    )
+                    mlflow.log_metric(
+                        "calfq/p_relax_decay",
+                        p_relax_decay,
+                        global_step,
+                    )
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
         for idx, (trunc, term) in enumerate(zip(truncations, terminations)):
