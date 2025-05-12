@@ -399,8 +399,8 @@ def main(args: Args):
                     relax_probs[idx, 0] = (
                         args.calfq_p_relax_init + (1.0 - args.calfq_p_relax_init) * frac
                     )
-                    episode_len = sum(rolling_episode_lengths) / len(
-                        rolling_episode_lengths
+                    episode_len = int(
+                        sum(rolling_episode_lengths) / len(rolling_episode_lengths)
                     )
                     reference_init = sum(
                         args.calfq_p_relax_init
