@@ -262,10 +262,11 @@ def main(args: Args):
             safe_actions,
         )
         relax_probs *= p_relax_decay
-        n_safe_actions += ~np.logical_or(
+        safe_actions_mask = ~np.logical_or(
             is_q_values_improved,
             np.random.rand(*relax_probs.shape) < relax_probs,
         )
+        n_safe_actions += safe_actions_mask
 
         next_obs, rewards, terminations, truncations, infos = envs.step(
             np.array(current_actions, dtype=float)
@@ -398,7 +399,9 @@ def main(args: Args):
                 p_relax_decay = args.calfq_p_relax_decay + args.calfq_anneal * (
                     1 - args.calfq_p_relax_decay
                 ) * (global_step / args.total_timesteps)
-        rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
+
+        if np.any(safe_actions_mask):
+            rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
         obs = next_obs
