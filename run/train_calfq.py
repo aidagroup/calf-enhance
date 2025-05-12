@@ -400,7 +400,7 @@ def main(args: Args):
                     1 - args.calfq_p_relax_decay
                 ) * (global_step / args.total_timesteps)
 
-        if np.any(safe_actions_mask):
+        if np.any(~safe_actions_mask):
             rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
