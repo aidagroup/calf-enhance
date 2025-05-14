@@ -136,12 +136,15 @@ def main():
 
     # Run for 1000 steps or until terminated
     total_reward = 0
+    n_in_spot = 0
     for step in range(1500):
         # Get action from controller
         action = controller.get_action(observation)
 
         # Apply action
         observation, reward, terminated, truncated, info = env.step(action)
+        if info["is_in_spot"]:
+            n_in_spot += 1
         total_reward += reward
 
         # Check if episode is done
@@ -155,6 +158,7 @@ def main():
                 f"Final orientation: theta={theta:.2f} (target={np.pi/2:.2f}), omega={omega:.2f}"
             )
             print(f"Total reward: {total_reward:.2f}")
+            print(f"Number of times in spot: {n_in_spot/1500:.2f}")
             break
 
     # Clean up
