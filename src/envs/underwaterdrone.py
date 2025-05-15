@@ -236,6 +236,7 @@ class UnderwaterDroneEnv(gym.Env):
         self.n_near_borders = 0
         self.n_in_spot = 0
         self.n_resets = 0
+        self.avoidance_score = -np.inf
         # Reset the environment
         self.reset()
 
@@ -259,6 +260,7 @@ class UnderwaterDroneEnv(gym.Env):
         self._setup_rendering()
         self.n_near_borders = 0
         self.n_in_spot = 0
+        self.avoidance_score = -np.inf
         return self._get_obs(), self._get_info()
 
     def step(
@@ -280,7 +282,7 @@ class UnderwaterDroneEnv(gym.Env):
 
     def _is_in_spot(self):
         return (
-            self.drone.x / self.semimajor_axis**2
+            self.drone.x ** 2 / self.semimajor_axis**2
             + (self.drone.y - TOP_Y / 2) ** 2 / self.semiminor_axis**2
             <= 1.0
         )
@@ -316,6 +318,14 @@ class UnderwaterDroneEnv(gym.Env):
         if self._is_in_spot():
             self.n_in_spot += 1
 
+        current_avoidance_score = np.clip(
+            self.drone.x ** 2 / self.semimajor_axis**2
+            + (self.drone.y - TOP_Y / 2) ** 2 / self.semiminor_axis**2,
+            0.0,
+            1.0,
+        )
+        self.avoidance_score = min(self.avoidance_score, current_avoidance_score)
+
         return {
             "x": self.drone.x,
             "y": self.drone.y,
@@ -325,6 +335,8 @@ class UnderwaterDroneEnv(gym.Env):
             "n_near_borders": self.n_near_borders,
             "is_in_spot": self._is_in_spot(),
             "n_in_spot": self.n_in_spot,
+            "current_avoidance_score": current_avoidance_score,
+            "avoidance_score": np.copy(self.avoidance_score),
         }
 
     def _setup_rendering(self):
