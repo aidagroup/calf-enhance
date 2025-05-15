@@ -260,7 +260,7 @@ class UnderwaterDroneEnv(gym.Env):
         self._setup_rendering()
         self.n_near_borders = 0
         self.n_in_spot = 0
-        self.avoidance_score = -np.inf
+        self.avoidance_score = np.inf
         return self._get_obs(), self._get_info()
 
     def step(
@@ -324,7 +324,7 @@ class UnderwaterDroneEnv(gym.Env):
             0.0,
             1.0,
         )
-        self.avoidance_score = min(self.avoidance_score, current_avoidance_score)
+        self.avoidance_score = np.minimum(self.avoidance_score, current_avoidance_score)
 
         return {
             "x": self.drone.x,
