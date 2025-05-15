@@ -236,7 +236,7 @@ class UnderwaterDroneEnv(gym.Env):
         self.n_near_borders = 0
         self.n_in_spot = 0
         self.n_resets = 0
-        self.avoidance_score = -np.inf
+        self.avoidance_score = np.inf
         # Reset the environment
         self.reset()
 

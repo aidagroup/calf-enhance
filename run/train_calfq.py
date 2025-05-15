@@ -235,7 +235,7 @@ def main(args: Args):
     p_relax_decay = args.calfq_p_relax_decay
     n_safe_actions = np.zeros(shape=(envs.num_envs, 1))
     rolling_episode_lengths = deque(maxlen=args.rolling_average_window)
-
+    # episode_trajectory = []
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -271,10 +271,20 @@ def main(args: Args):
             np.random.rand(*relax_probs.shape) < relax_probs,
         )
         n_safe_actions += safe_actions_mask
-
+        
         next_obs, rewards, terminations, truncations, infos = envs.step(
             np.array(current_actions, dtype=float)
         )
+        
+        # episode_trajectory.append({
+        #     "obs": obs,
+        #     "actions": current_actions,
+        #     "next_obs": next_obs,
+        #     "rewards": rewards,
+        #     "terminations": terminations,
+        #     "truncations": truncations,
+        #     "infos": infos,
+        # })
 
         best_q_values = np.where(
             is_q_values_improved,
