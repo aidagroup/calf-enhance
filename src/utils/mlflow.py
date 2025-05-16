@@ -21,6 +21,7 @@ from loguru import logger
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import json
+
 @dataclass
 class MlflowConfig:
     tracking_uri: str
@@ -135,7 +136,7 @@ def mlflow_monitoring():
 
 
 
-def log_json_artifact(json : dict, artifact_name : str, precision: int = 4):
+def log_json_artifact(json_dict : dict, artifact_name : str, precision: int = 4):
     class NumpyEncoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, np.ndarray):
@@ -148,5 +149,5 @@ def log_json_artifact(json : dict, artifact_name : str, precision: int = 4):
         temp_dir = Path(temp_dir)
         json_path = temp_dir / f"tmp.json"
         with open(json_path, "w") as f:
-            json.dump(json, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
+            json.dump(json_dict, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
         mlflow.log_artifact(json_path, artifact_name)
