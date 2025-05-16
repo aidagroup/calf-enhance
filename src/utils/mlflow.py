@@ -143,8 +143,8 @@ def log_json_artifact(json_dict : dict, artifact_name : str, precision: int = 4)
                 return obj.tolist()
             if isinstance(obj, float):
                 return round(obj, precision)
-            if isinstance(obj, bool):
-                return obj
+            if isinstance(obj, (bool, np.bool_)):
+                return bool(obj)
             return super().default(obj)
 
     with TemporaryDirectory() as temp_dir:
