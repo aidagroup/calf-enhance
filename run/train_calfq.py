@@ -279,11 +279,6 @@ def main(args: Args):
         episode_trajectory.append({
             "obs": obs,
             "actions": current_actions,
-            "next_obs": next_obs,
-            "rewards": rewards,
-            "terminations": terminations,
-            "truncations": truncations,
-            "infos": infos,
         })
 
         best_q_values = np.where(
