@@ -136,7 +136,7 @@ def mlflow_monitoring():
 
 
 
-def log_json_artifact(json_dict : dict, artifact_name : str, json_name: str, precision: int = 4):
+def log_json_artifact(json_dict : dict, artifact_name : str, json_name: str, precision: int = 5):
     class NumpyEncoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, np.ndarray):
