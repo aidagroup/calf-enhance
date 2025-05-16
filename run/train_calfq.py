@@ -271,15 +271,17 @@ def main(args: Args):
             np.random.rand(*relax_probs.shape) < relax_probs,
         )
         n_safe_actions += safe_actions_mask
-        
+
         next_obs, rewards, terminations, truncations, infos = envs.step(
             np.array(current_actions, dtype=float)
         )
-        
-        episode_trajectory.append({
-            "obs": obs,
-            "actions": current_actions,
-        })
+
+        episode_trajectory.append(
+            {
+                "obs": obs,
+                "actions": current_actions,
+            }
+        )
 
         best_q_values = np.where(
             is_q_values_improved,
@@ -332,7 +334,9 @@ def main(args: Args):
                         info["n_in_high_cost_area"] / info["episode"]["l"],
                         global_step,
                     )
-                    rolling_window["n_in_high_cost_area"].append(info["n_in_high_cost_area"])
+                    rolling_window["n_in_high_cost_area"].append(
+                        info["n_in_high_cost_area"]
+                    )
                     mlflow.log_metric(
                         f"episode_stats/n_in_high_cost_area_rolling_{args.rolling_average_window}",
                         np.mean(rolling_window["n_in_high_cost_area"]),
@@ -377,8 +381,11 @@ def main(args: Args):
                     )
                     rolling_episode_lengths.append(info["episode"]["l"])
 
-
-                    log_json_artifact(episode_trajectory, f"trajectories", json_name=f"{global_step:010d}.json")
+                    log_json_artifact(
+                        episode_trajectory,
+                        f"trajectories",
+                        json_name=f"{global_step:010d}.json",
+                    )
                     episode_trajectory = []
                     break
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`

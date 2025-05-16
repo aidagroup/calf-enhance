@@ -3,6 +3,7 @@ import gymnasium as gym
 from gymnasium import spaces
 import pygame
 from typing import Optional, Tuple, Dict, Any
+from scipy.optimize import minimize_scalar
 
 TIME_STEP_SIZE = 0.02
 DRONE_MASS = 1.0
@@ -312,18 +313,39 @@ class UnderwaterDroneEnv(gym.Env):
             dtype=np.float32,
         )
 
+    def _distance_to_parabola(self, x0, y0):
+        """
+        Robustly computes the shortest distance from point (x0, y0)
+        to the parabola x = 0.81 - 2.25(y - 2)^2 using scalar minimization.
+
+        Returns:
+            distance: float - shortest distance
+            x_closest: float - x on the parabola
+            y_closest: float - y on the parabola
+        """
+
+        def D2(y):  # Squared distance function
+            a, b = self.semimajor_axis**2, self.semiminor_axis**2
+            x_parabola = a - a / b * (y - 2) ** 2
+            return (x_parabola - x0) ** 2 + (y - y0) ** 2
+
+        result = minimize_scalar(D2, bounds=(0, 4), method="bounded")
+        distance = np.sqrt(result.fun)
+
+        return distance
+
     def _get_info(self) -> Dict[str, Any]:
         if self.drone._near_borders():
             self.n_near_borders += 1
         if self._is_in_high_cost_area():
             self.n_in_high_cost_area += 1
+            distance_to_parabola = self._distance_to_parabola(
+                self.drone.x, self.drone.y
+            )
+            current_avoidance_score = 1.0 - distance_to_parabola
+        else:
+            current_avoidance_score = 1.0
 
-        current_avoidance_score = np.clip(
-            self.drone.x / self.semimajor_axis**2
-            + (self.drone.y - TOP_Y / 2) ** 2 / self.semiminor_axis**2,
-            0.0,
-            1.0,
-        )
         self.avoidance_score = np.minimum(self.avoidance_score, current_avoidance_score)
 
         return {

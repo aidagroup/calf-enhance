@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tyro
 from stable_baselines3.common.buffers import ReplayBuffer
-from src.utils.mlflow import mlflow_monitoring, MlflowConfig
+from src.utils.mlflow import mlflow_monitoring, MlflowConfig, log_json_artifact
 from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
@@ -209,7 +209,7 @@ def main(args: Args):
         handle_timeout_termination=False,
     )
     start_time = time.time()
-
+    episode_trajectory = []
     # TRY NOT TO MODIFY: start the game
     obs, _ = envs.reset(seed=args.seed)
     for global_step in range(args.total_timesteps):
@@ -232,7 +232,12 @@ def main(args: Args):
         next_obs, rewards, terminations, truncations, infos = envs.step(
             np.array(actions, dtype=float)
         )
-
+        episode_trajectory.append(
+            {
+                "obs": obs,
+                "actions": actions,
+            }
+        )
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
             for info in infos["final_info"]:
@@ -256,43 +261,17 @@ def main(args: Args):
                     )
 
                     mlflow.log_metric(
-                        "episode_stats/n_near_borders",
-                        info["n_near_borders"] / info["episode"]["l"],
-                        global_step,
-                    )
-                    rolling_window["n_near_borders"].append(info["n_near_borders"])
-
-                    mlflow.log_metric(
-                        f"episode_stats/n_near_borders_rolling_{args.rolling_average_window}",
-                        np.mean(rolling_window["n_near_borders"]),
-                        global_step,
-                    )
-
-                    mlflow.log_metric(
-                        "episode_stats/n_in_spot",
-                        info["n_in_spot"] / info["episode"]["l"],
-                        global_step,
-                    )
-                    rolling_window["n_in_spot"].append(info["n_in_spot"])
-
-                    mlflow.log_metric(
-                        f"episode_stats/n_in_spot_rolling_{args.rolling_average_window}",
-                        np.mean(rolling_window["n_in_spot"]),
-                        global_step,
-                    )
-
-                    mlflow.log_metric(
                         "episode_stats/is_in_hole",
                         info["is_in_hole"],
                         global_step,
                     )
                     rolling_window["is_in_hole"].append(info["is_in_hole"])
-
                     mlflow.log_metric(
                         f"episode_stats/is_in_hole_rolling_{args.rolling_average_window}",
                         np.mean(rolling_window["is_in_hole"]),
                         global_step,
                     )
+
                     mlflow.log_metric(
                         "episode_stats/avoidance_score",
                         info["avoidance_score"],
@@ -304,6 +283,12 @@ def main(args: Args):
                         np.mean(rolling_window["avoidance_score"]),
                         global_step,
                     )
+                    log_json_artifact(
+                        episode_trajectory,
+                        f"trajectories",
+                        json_name=f"{global_step:010d}.json",
+                    )
+                    episode_trajectory = []
                     break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
