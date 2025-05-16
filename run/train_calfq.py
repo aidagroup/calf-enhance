@@ -333,14 +333,14 @@ def main(args: Args):
                     )
 
                     mlflow.log_metric(
-                        "episode_stats/n_in_spot",
-                        info["n_in_spot"] / info["episode"]["l"],
+                        "episode_stats/n_in_high_cost_area",
+                        info["n_in_high_cost_area"] / info["episode"]["l"],
                         global_step,
                     )
-                    rolling_window["n_in_spot"].append(info["n_in_spot"])
+                    rolling_window["n_in_high_cost_area"].append(info["n_in_high_cost_area"])
                     mlflow.log_metric(
-                        f"episode_stats/n_in_spot_rolling_{args.rolling_average_window}",
-                        np.mean(rolling_window["n_in_spot"]),
+                        f"episode_stats/n_in_high_cost_area_rolling_{args.rolling_average_window}",
+                        np.mean(rolling_window["n_in_high_cost_area"]),
                         global_step,
                     )
 
