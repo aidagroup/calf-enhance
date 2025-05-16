@@ -379,6 +379,7 @@ def main(args: Args):
 
 
                     log_json_artifact(episode_trajectory, f"trajectories", json_name=f"{global_step:010d}.json")
+                    episode_trajectory = []
                     break
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
