@@ -149,7 +149,7 @@ def log_json_artifact(json_dict : dict, artifact_name : str, precision: int = 4)
 
     with TemporaryDirectory() as temp_dir:
         temp_dir = Path(temp_dir)
-        json_path = temp_dir / f"tmp.json"
+        json_path = temp_dir / f"{artifact_name}.json"
         with open(json_path, "w") as f:
             json.dump(json_dict, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
         mlflow.log_artifact(json_path, artifact_name)
