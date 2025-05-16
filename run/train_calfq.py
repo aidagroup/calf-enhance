@@ -12,7 +12,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 import tyro
 from stable_baselines3.common.buffers import ReplayBuffer
-from src.utils.mlflow import mlflow_monitoring, MlflowConfig
+from src.utils.mlflow import mlflow_monitoring, MlflowConfig, log_json_artifact
 from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
@@ -235,7 +235,7 @@ def main(args: Args):
     p_relax_decay = args.calfq_p_relax_decay
     n_safe_actions = np.zeros(shape=(envs.num_envs, 1))
     rolling_episode_lengths = deque(maxlen=args.rolling_average_window)
-    # episode_trajectory = []
+    episode_trajectory = []
     for global_step in range(args.total_timesteps):
         # ALGO LOGIC: put action logic here
         if global_step < args.learning_starts:
@@ -276,15 +276,15 @@ def main(args: Args):
             np.array(current_actions, dtype=float)
         )
         
-        # episode_trajectory.append({
-        #     "obs": obs,
-        #     "actions": current_actions,
-        #     "next_obs": next_obs,
-        #     "rewards": rewards,
-        #     "terminations": terminations,
-        #     "truncations": truncations,
-        #     "infos": infos,
-        # })
+        episode_trajectory.append({
+            "obs": obs,
+            "actions": current_actions,
+            "next_obs": next_obs,
+            "rewards": rewards,
+            "terminations": terminations,
+            "truncations": truncations,
+            "infos": infos,
+        })
 
         best_q_values = np.where(
             is_q_values_improved,
@@ -381,6 +381,13 @@ def main(args: Args):
                         global_step,
                     )
                     rolling_episode_lengths.append(info["episode"]["l"])
+
+                    mlflow.log_artifact(
+                        f"{RUN_PATH}/videos/{args.mlflow.run_name}/episode_{info['episode']['l']}.mp4",
+                        "videos",
+                    )
+
+                    log_json_artifact(episode_trajectory, f"trajectories/trajectory_{global_step:010d}.json")
                     break
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()

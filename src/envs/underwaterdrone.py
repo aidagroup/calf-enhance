@@ -46,7 +46,7 @@ class UnderwaterDrone:
 
         # Randomize initial state using the seeded generator
         self.x = self.rng.uniform(-MAX_X / 2, MAX_X / 2)
-        self.y = self.rng.uniform(0, TOP_Y / 3)
+        self.y = self.rng.uniform(0, np.minimum(TOP_Y / 3, self.x / 3.5 + 1.33))
         self.theta = self.rng.uniform(np.pi / 2 - np.pi / 20, np.pi / 2 + np.pi / 20)
         self.v_x = self.rng.uniform(-0.2, 0.2)
         self.v_y = self.rng.uniform(-0.2, 0.2)
@@ -234,7 +234,7 @@ class UnderwaterDroneEnv(gym.Env):
 
         # Counters
         self.n_near_borders = 0
-        self.n_in_spot = 0
+        self.n_in_high_cost_area = 0
         self.n_resets = 0
         self.avoidance_score = np.inf
         # Reset the environment
@@ -259,7 +259,7 @@ class UnderwaterDroneEnv(gym.Env):
         # Setup for rendering
         self._setup_rendering()
         self.n_near_borders = 0
-        self.n_in_spot = 0
+        self.n_in_high_cost_area = 0
         self.avoidance_score = np.inf
         return self._get_obs(), self._get_info()
 
@@ -280,9 +280,9 @@ class UnderwaterDroneEnv(gym.Env):
 
         return self._get_obs(), reward, terminated, truncated, self._get_info()
 
-    def _is_in_spot(self):
+    def _is_in_high_cost_area(self):
         return (
-            self.drone.x ** 2 / self.semimajor_axis**2
+            self.drone.x / self.semimajor_axis**2
             + (self.drone.y - TOP_Y / 2) ** 2 / self.semiminor_axis**2
             <= 1.0
         )
@@ -295,7 +295,7 @@ class UnderwaterDroneEnv(gym.Env):
             - 0.05 * self.drone.v_x**2
             - 0.05 * self.drone.v_y**2
             - 0.01 * self.drone.omega**2
-            - 5 * (1 if self._is_in_spot() else 0)
+            - 5 * (1 if self._is_in_high_cost_area() else 0)
         )
 
     def _get_obs(self) -> np.ndarray:
@@ -315,11 +315,11 @@ class UnderwaterDroneEnv(gym.Env):
     def _get_info(self) -> Dict[str, Any]:
         if self.drone._near_borders():
             self.n_near_borders += 1
-        if self._is_in_spot():
-            self.n_in_spot += 1
+        if self._is_in_high_cost_area():
+            self.n_in_high_cost_area += 1
 
         current_avoidance_score = np.clip(
-            self.drone.x ** 2 / self.semimajor_axis**2
+            self.drone.x / self.semimajor_axis**2
             + (self.drone.y - TOP_Y / 2) ** 2 / self.semiminor_axis**2,
             0.0,
             1.0,
@@ -333,8 +333,8 @@ class UnderwaterDroneEnv(gym.Env):
             "is_in_hole": self.drone._in_hole(),
             "is_near_borders": self.drone._near_borders(),
             "n_near_borders": self.n_near_borders,
-            "is_in_spot": self._is_in_spot(),
-            "n_in_spot": self.n_in_spot,
+            "is_in_high_cost_area": self._is_in_high_cost_area(),
+            "n_in_high_cost_area": self.n_in_high_cost_area,
             "current_avoidance_score": current_avoidance_score,
             "avoidance_score": np.copy(self.avoidance_score),
         }

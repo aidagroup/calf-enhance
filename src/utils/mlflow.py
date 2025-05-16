@@ -18,8 +18,9 @@ from typing import Optional
 import git
 from src import REPO_PATH
 from loguru import logger
-
-
+from pathlib import Path
+from tempfile import TemporaryDirectory
+import json
 @dataclass
 class MlflowConfig:
     tracking_uri: str
@@ -131,3 +132,21 @@ def mlflow_monitoring():
         return inner2
 
     return inner1
+
+
+
+def log_json_artifact(json : dict, artifact_name : str, precision: int = 4):
+    class NumpyEncoder(json.JSONEncoder):
+        def default(self, obj):
+            if isinstance(obj, np.ndarray):
+                return obj.tolist()
+            if isinstance(obj, float):
+                return round(obj, precision)
+            return super().default(obj)
+
+    with TemporaryDirectory() as temp_dir:
+        temp_dir = Path(temp_dir)
+        json_path = temp_dir / f"tmp.json"
+        with open(json_path, "w") as f:
+            json.dump(json, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
+        mlflow.log_artifact(json_path, artifact_name)
