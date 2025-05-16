@@ -342,7 +342,7 @@ class UnderwaterDroneEnv(gym.Env):
             distance_to_parabola = self._distance_to_parabola(
                 self.drone.x, self.drone.y
             )
-            current_avoidance_score = 1.0 - distance_to_parabola
+            current_avoidance_score = np.clip(1.0 - distance_to_parabola, 0.0, 1.0)
         else:
             current_avoidance_score = 1.0
 
