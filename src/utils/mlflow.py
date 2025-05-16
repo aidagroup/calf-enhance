@@ -140,12 +140,17 @@ def log_json_artifact(json_dict : dict, artifact_name : str, json_name: str, pre
     class NumpyEncoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, np.ndarray):
-                return np.round(obj, precision).tolist()
+                return self._process_array(obj)
             if isinstance(obj, float):
-                return float(np.round(obj, precision))
+                return float(f"{obj:.{precision}f}")
             if isinstance(obj, (bool, np.bool_)):
                 return bool(obj)
             return super().default(obj)
+
+        def _process_array(self, arr):
+            if arr.ndim == 1:
+                return [float(f"{x:.{precision}f}") for x in arr.tolist()]
+            return [self._process_array(x) for x in arr]
 
     with TemporaryDirectory() as temp_dir:
         temp_dir = Path(temp_dir)
