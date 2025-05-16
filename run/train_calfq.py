@@ -378,7 +378,7 @@ def main(args: Args):
                     rolling_episode_lengths.append(info["episode"]["l"])
 
 
-                    log_json_artifact(episode_trajectory, f"trajectories/{global_step:010d}")
+                    log_json_artifact(episode_trajectory, f"trajectories", json_name=f"{global_step:010d}.json")
                     break
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
