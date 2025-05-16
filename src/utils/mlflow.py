@@ -140,7 +140,7 @@ def log_json_artifact(json_dict : dict, artifact_name : str, json_name: str, pre
     class NumpyEncoder(json.JSONEncoder):
         def default(self, obj):
             if isinstance(obj, np.ndarray):
-                return obj.tolist()
+                return np.round(obj, precision).tolist()
             if isinstance(obj, float):
                 return round(obj, precision)
             if isinstance(obj, (bool, np.bool_)):
