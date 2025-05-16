@@ -382,10 +382,6 @@ def main(args: Args):
                     )
                     rolling_episode_lengths.append(info["episode"]["l"])
 
-                    mlflow.log_artifact(
-                        f"{RUN_PATH}/videos/{args.mlflow.run_name}/episode_{info['episode']['l']}.mp4",
-                        "videos",
-                    )
 
                     log_json_artifact(episode_trajectory, f"trajectories/trajectory_{global_step:010d}.json")
                     break
