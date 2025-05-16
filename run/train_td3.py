@@ -16,7 +16,7 @@ from src.utils.mlflow import mlflow_monitoring, MlflowConfig
 from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
-from collections import defaultdict
+from collections import defaultdict, deque
 
 
 @dataclass
@@ -197,7 +197,7 @@ def main(args: Args):
     )
     actor_optimizer = optim.Adam(list(actor.parameters()), lr=args.learning_rate)
 
-    rolling_window = defaultdict(list)
+    rolling_window = defaultdict(lambda: deque(maxlen=args.rolling_average_window))
 
     envs.single_observation_space.dtype = np.float32
     rb = ReplayBuffer(
@@ -249,15 +249,9 @@ def main(args: Args):
                     )
 
                     rolling_window["episodic_return"].append(info["episode"]["r"])
-                    if (
-                        len(rolling_window["episodic_return"])
-                        > args.rolling_average_window
-                    ):
-                        rolling_window["episodic_return"].pop(0)
                     mlflow.log_metric(
                         f"charts/episodic_return_rolling_{args.rolling_average_window}",
-                        sum(rolling_window["episodic_return"])
-                        / len(rolling_window["episodic_return"]),
+                        np.mean(rolling_window["episodic_return"]),
                         global_step,
                     )
 
@@ -267,15 +261,10 @@ def main(args: Args):
                         global_step,
                     )
                     rolling_window["n_near_borders"].append(info["n_near_borders"])
-                    if (
-                        len(rolling_window["n_near_borders"])
-                        > args.rolling_average_window
-                    ):
-                        rolling_window["n_near_borders"].pop(0)
+
                     mlflow.log_metric(
                         f"episode_stats/n_near_borders_rolling_{args.rolling_average_window}",
-                        sum(rolling_window["n_near_borders"])
-                        / len(rolling_window["n_near_borders"]),
+                        np.mean(rolling_window["n_near_borders"]),
                         global_step,
                     )
 
@@ -285,12 +274,10 @@ def main(args: Args):
                         global_step,
                     )
                     rolling_window["n_in_spot"].append(info["n_in_spot"])
-                    if len(rolling_window["n_in_spot"]) > args.rolling_average_window:
-                        rolling_window["n_in_spot"].pop(0)
+
                     mlflow.log_metric(
                         f"episode_stats/n_in_spot_rolling_{args.rolling_average_window}",
-                        sum(rolling_window["n_in_spot"])
-                        / len(rolling_window["n_in_spot"]),
+                        np.mean(rolling_window["n_in_spot"]),
                         global_step,
                     )
 
@@ -300,15 +287,23 @@ def main(args: Args):
                         global_step,
                     )
                     rolling_window["is_in_hole"].append(info["is_in_hole"])
-                    if len(rolling_window["is_in_hole"]) > args.rolling_average_window:
-                        rolling_window["is_in_hole"].pop(0)
+
                     mlflow.log_metric(
                         f"episode_stats/is_in_hole_rolling_{args.rolling_average_window}",
-                        sum(rolling_window["is_in_hole"])
-                        / len(rolling_window["is_in_hole"]),
+                        np.mean(rolling_window["is_in_hole"]),
                         global_step,
                     )
-
+                    mlflow.log_metric(
+                        "episode_stats/avoidance_score",
+                        info["avoidance_score"],
+                        global_step,
+                    )
+                    rolling_window["avoidance_score"].append(info["avoidance_score"])
+                    mlflow.log_metric(
+                        f"episode_stats/avoidance_score_rolling_{args.rolling_average_window}",
+                        np.mean(rolling_window["avoidance_score"]),
+                        global_step,
+                    )
                     break
 
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
