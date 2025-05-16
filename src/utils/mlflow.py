@@ -142,7 +142,7 @@ def log_json_artifact(json_dict : dict, artifact_name : str, json_name: str, pre
             if isinstance(obj, np.ndarray):
                 return np.round(obj, precision).tolist()
             if isinstance(obj, float):
-                return round(obj, precision)
+                return float(np.round(obj, precision))
             if isinstance(obj, (bool, np.bool_)):
                 return bool(obj)
             return super().default(obj)
