@@ -47,7 +47,7 @@ class UnderwaterDrone:
 
         # Randomize initial state using the seeded generator
         self.x = self.rng.uniform(-MAX_X / 2, MAX_X / 2)
-        self.y = self.rng.uniform(0, np.minimum(TOP_Y / 3, self.x / 3.5 + 1.33))
+        self.y = self.rng.uniform(0, TOP_Y / 3.0)
         self.theta = self.rng.uniform(np.pi / 2 - np.pi / 20, np.pi / 2 + np.pi / 20)
         self.v_x = self.rng.uniform(-0.2, 0.2)
         self.v_y = self.rng.uniform(-0.2, 0.2)
@@ -237,7 +237,8 @@ class UnderwaterDroneEnv(gym.Env):
         self.n_near_borders = 0
         self.n_in_high_cost_area = 0
         self.n_resets = 0
-        self.avoidance_score = np.inf
+        self.avoidance_score = -np.inf
+        self.init_avoidance_score = None
         # Reset the environment
         self.reset()
 
@@ -261,7 +262,10 @@ class UnderwaterDroneEnv(gym.Env):
         self._setup_rendering()
         self.n_near_borders = 0
         self.n_in_high_cost_area = 0
-        self.avoidance_score = np.inf
+        self.avoidance_score = -np.inf
+        self.init_avoidance_score = self._distance_to_exterior_of_high_cost_area(
+            self.drone.x, self.drone.y
+        )
         return self._get_obs(), self._get_info()
 
     def step(
@@ -334,19 +338,26 @@ class UnderwaterDroneEnv(gym.Env):
 
         return distance
 
+    def _distance_to_exterior_of_high_cost_area(self, x0, y0):
+        """
+        Computes the shortest distance from point (x0, y0)
+        to the exterior of the high cost area.
+        """
+        if self._is_in_high_cost_area():
+            return self._distance_to_parabola(x0, y0)
+        else:
+            return 0.0
+
     def _get_info(self) -> Dict[str, Any]:
         if self.drone._near_borders():
             self.n_near_borders += 1
         if self._is_in_high_cost_area():
             self.n_in_high_cost_area += 1
-            distance_to_parabola = self._distance_to_parabola(
-                self.drone.x, self.drone.y
-            )
-            current_avoidance_score = np.clip(1.0 - distance_to_parabola, 0.0, 1.0)
-        else:
-            current_avoidance_score = 1.0
 
-        self.avoidance_score = np.minimum(self.avoidance_score, current_avoidance_score)
+        current_avoidance_score = self._distance_to_exterior_of_high_cost_area(
+            self.drone.x, self.drone.y
+        ) - self.init_avoidance_score
+        self.avoidance_score = np.maximum(self.avoidance_score, current_avoidance_score)
 
         return {
             "x": self.drone.x,
