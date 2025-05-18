@@ -90,6 +90,7 @@ class UnderwaterDrone:
           F_long: thrust in the drone's longitudinal direction (body x-axis).
           F_lat:  thrust in the drone's lateral direction (body y-axis).
         dt: time step for Euler integration.
+          remembers the last action for thrust.
         """
         if self.frozen:
             return
@@ -97,6 +98,7 @@ class UnderwaterDrone:
         if self._in_hole():
             self._freeze()
             return
+        self.last_action = action
 
         F_long, F_lat = action
         F_long = np.clip(F_long, -self.max_F_long, self.max_F_long)
@@ -318,6 +320,14 @@ class UnderwaterDroneEnv(gym.Env):
 
         self.show_target_icon = True   # set False if you want to hide the icon
 
+        self.bubbles = []
+        self._last_bubble_spawn = 0.0
+
+        # ─── UnderwaterDroneEnv.__init__ ───
+        self.last_action = np.zeros(2)        #  ←  add this anywhere in __init__
+
+
+
 
         # Finish init by resetting
         self.reset(seed=seed)
@@ -372,6 +382,8 @@ class UnderwaterDroneEnv(gym.Env):
     def step(
         self, action: np.ndarray
     ) -> Tuple[np.ndarray, float, bool, bool, Dict[str, Any]]:
+        self.last_action = action         #  ←  store action *before* physics
+
         # Execute drone physics
         self.drone.step(action, dt=TIME_STEP_SIZE)
 
@@ -523,21 +535,20 @@ class UnderwaterDroneEnv(gym.Env):
 
 
     def _create_heatmap(self):
-        """Exact half-ellipse fade + visible lime-green bubbles (using randint) + raft."""
+        """Exact half-ellipse fade + animated bubbles + thick boundary + raft."""
         if self.screen is None:
             return
 
-        # Ellipse/cost params
-        a2 = self.semimajor_axis ** 2    # 0.9²
-        b2 = self.semiminor_axis ** 2    # 0.6²
-        b0 = TOP_Y / 2.0                 # 2.0
+        a2 = self.semimajor_axis ** 2
+        b2 = self.semiminor_axis ** 2
+        b0 = TOP_Y / 2.0
 
         W, H = self.screen_width, self.screen_height
         surf = pygame.Surface((W, H), pygame.SRCALPHA)
 
-        # 1) per-pixel light→dark green fade (forest green)
-        light = (44, 138, 44)   # light green
-        dark  = (0, 100, 0)       # dark green
+        light = (24, 98, 24)
+        dark  = (0, 70, 0)
+
         for py in range(H):
             y = (self.origin_y - py) / self.scale_factor
             for px in range(W):
@@ -557,25 +568,30 @@ class UnderwaterDroneEnv(gym.Env):
                     alpha = max(0, min(255, alpha))
                     surf.set_at((px, py), (r, g, b, alpha))
 
-        # 2) random toxin bubbles in lime-green (denser in the middle)
-        num_bubbles = 100
-        for _ in range(num_bubbles):
-            # Uniform sampling of y
-            y = self.rng.uniform(0.0, TOP_Y)
-            val = 1.0 - ((y - b0) ** 2) / b2
-            if val <= 0:
-                continue
-            x_bound = a2 * val
-            # sample x from -x_bound to +x_bound (full region)
-            x = self.rng.uniform(-x_bound, x_bound)
-            # You can bias bubbles away from the boundary if you wish (e.g., multiply val)
-            px = self.to_pixels_x(x)
-            py = self.to_pixels_y(y)
-            r  = self.rng.randint(3, 7)
-            # Brighter lime-green
-            pygame.draw.circle(surf, (80, 255, 120, 120), (px, py), r)
+        # ------------------------------------------------------------------
+        #  Replace the old bubble-spawn block with **this**:
 
-        # 3) raft at the hole using HOLE_WIDTH
+        self.bubbles = []                                    # clear previous list
+        spawn_prob   = 0.0005                                  # 1 % chance per pixel
+        for py in range(H):
+            y = (self.origin_y - py) / self.scale_factor
+            for px in range(W):
+                x   = (px - self.origin_x) / self.scale_factor
+                val = x / a2 + ((y - b0) ** 2) / b2
+                if val <= 1.0 and self.rng.random() < spawn_prob:
+                    # centre is (x,y) which is *inside* the ellipse by construction
+                    r_pix   = self.rng.randint(3, 7)         # radius 3–6 px
+                    t_birth = self.rng.uniform(0, 2)         # random phase
+                    self.bubbles.append({'x': x,
+                                        'y': y,
+                                        'r': r_pix,
+                                        'birth': t_birth})
+        # ------------------------------------------------------------------
+
+
+
+
+        # Raft at the hole using HOLE_WIDTH
         raft_w = int(HOLE_WIDTH * self.scale_factor)
         raft_h = int(0.05 * self.scale_factor)
         cx = self.to_pixels_x(0.0)
@@ -584,6 +600,9 @@ class UnderwaterDroneEnv(gym.Env):
         pygame.draw.rect(surf, (139, 69, 19), raft, border_radius=4)
 
         self.heatmap_surface = surf
+
+
+
 
 
 
@@ -615,6 +634,37 @@ class UnderwaterDroneEnv(gym.Env):
         # black border around flag
         pygame.draw.rect(self.screen, (0,0,0),
                          (cx+pole_w, cy-pole_h+2, flag_w, flag_h), 1)
+        
+
+
+    def _draw_thrust_arrows(self):
+        """Draw thrust force arrows for current control on the drone."""
+        # Get drone center and orientation
+        cx = self.to_pixels_x(self.drone.x)
+        cy = self.to_pixels_y(self.drone.y)
+        angle = self.drone.theta
+
+        # Scale for visual length
+        scale = 40
+
+        # Most recent action (or zero if unavailable)
+        if hasattr(self, 'last_action'):
+            F_long, F_lat = self.last_action
+        else:
+            F_long, F_lat = 0.0, 0.0
+
+        # Body frame vectors
+        dx_long = scale * F_long * np.cos(angle)
+        dy_long = -scale * F_long * np.sin(angle)
+        dx_lat = -scale * F_lat * np.sin(angle)
+        dy_lat = -scale * F_lat * np.cos(angle)
+
+        # Draw arrows (longitudinal: red, lateral: blue)
+        end_long = (int(cx + dx_long), int(cy + dy_long))
+        end_lat  = (int(cx + dx_lat),  int(cy + dy_lat))
+        pygame.draw.line(self.screen, (255, 60, 60), (cx, cy), end_long, 4)
+        pygame.draw.line(self.screen, (60, 60, 255), (cx, cy), end_lat, 4)
+        # Optionally: draw arrowheads here
 
 
     def _update_water_lines(self, dt):
@@ -676,6 +726,37 @@ class UnderwaterDroneEnv(gym.Env):
         tri  = (R @ self.drone.nose_local_coords.T).T + [self.drone.x, self.drone.y]
         tri_px = [(self.to_pixels_x(x), self.to_pixels_y(y)) for x, y in tri]
         pygame.draw.polygon(self.screen, (139,0,0), tri_px)
+
+
+        # Draw drone with thick black outline for visibility
+        
+        drone_px = self.to_pixels_x(self.drone.x)
+        drone_py = self.to_pixels_y(self.drone.y)
+        radius_px = int(self.drone.radius * self.scale_factor)
+        pygame.draw.circle(self.screen, (0, 0, 0), (drone_px, drone_py), radius_px + 3)  # thick black border
+        pygame.draw.circle(self.screen, (0, 180, 180), (drone_px, drone_py), radius_px)
+
+
+
+        # In your render() function, call this after drawing the drone body:
+        if hasattr(self, 'last_action'):
+            self._draw_thrust_arrows()
+
+
+
+                # --- Animate and draw bubbles on top of the heatmap ---
+        if hasattr(self, 'bubbles'):
+            t_now = pygame.time.get_ticks() / 1000.0
+            for bub in self.bubbles:
+                # Bubbles rise a bit and fade out after 2 seconds
+                t = (t_now - bub['birth']) % 2.0
+                fade = max(0, 1 - t / 2.0)
+                px = self.to_pixels_x(bub['x'])
+                py = self.to_pixels_y(bub['y'] + t * 0.12)
+                alpha = int(120 * fade)
+                color = (128, 200, 128, alpha)  # purplish-green
+                pygame.draw.circle(self.screen, color, (px, py), bub['r'])
+
 
         # 6½) axes with ticks / values --------------------------------------
         if self.show_axes:
