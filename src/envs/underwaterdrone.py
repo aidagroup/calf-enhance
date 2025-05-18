@@ -546,7 +546,7 @@ class UnderwaterDroneEnv(gym.Env):
         W, H = self.screen_width, self.screen_height
         surf = pygame.Surface((W, H), pygame.SRCALPHA)
 
-        light = (24, 98, 24)
+        light = (14, 88, 24)
         dark  = (0, 70, 0)
 
         for py in range(H):
@@ -556,7 +556,7 @@ class UnderwaterDroneEnv(gym.Env):
                 val = x / a2 + ((y - b0) ** 2) / b2
                 if val <= 1.0:
                     t = val  # fade from center to boundary
-                    alpha = int(200 * (1.0 - t))  # semi-transparent, not max
+                    alpha = int(150 * (1.0 - t) * 0.6)  # 50% as opaque everywhere
                     # Blend color between light and dark green
                     r = int(light[0] * (1 - t) + dark[0] * t)
                     g = int(light[1] * (1 - t) + dark[1] * t)
@@ -565,6 +565,7 @@ class UnderwaterDroneEnv(gym.Env):
                     r = max(0, min(255, r))
                     g = max(0, min(255, g))
                     b = max(0, min(255, b))
+                    
                     alpha = max(0, min(255, alpha))
                     surf.set_at((px, py), (r, g, b, alpha))
 
