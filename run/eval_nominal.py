@@ -143,7 +143,7 @@ def main():
 
         # Apply action
         observation, reward, terminated, truncated, info = env.step(action)
-        if info["is_in_spot"]:
+        if info["is_in_high_cost_area"]:
             n_in_spot += 1
         total_reward += reward
 

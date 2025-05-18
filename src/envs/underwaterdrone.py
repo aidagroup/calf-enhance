@@ -21,6 +21,8 @@ MAX_V = 3.0
 MAX_OMEGA = 3.0
 
 
+
+
 class UnderwaterDrone:
     def __init__(
         self,
@@ -71,13 +73,16 @@ class UnderwaterDrone:
         # We'll keep a "frozen" flag
         self.frozen = False
 
-        # Prepare local geometry for the "nose" polygon
-        self.nose_len = 0.3
-        self.nose_half_w = 0.2
-        # local coords: tip at (nose_len, 0), base corners around (0, +/- nose_half_w)
+        # … everything as before up to preparing the drone nose …
+        # shrink the nose triangle:
+        self.nose_len    = 0.17  # was 0.3
+        self.nose_half_w = 0.07  # was 0.2
         self.nose_local_coords = np.array(
-            [[self.nose_len, 0.0], [0.0, self.nose_half_w], [0.0, -self.nose_half_w]]
+            [[self.nose_len, 0.0],
+             [0.0, self.nose_half_w],
+             [0.0, -self.nose_half_w]]
         )
+
 
     def step(self, action, dt=TIME_STEP_SIZE):
         """
@@ -219,19 +224,13 @@ class UnderwaterDroneEnv(gym.Env):
         self.drone = None
 
         # Display settings
-        self.screen_width = 800
-        self.screen_height = 600
+        self.screen_width = 1200
+        self.screen_height = 900
         self.scale_factor = 100  # Scale from physics units to pixels
 
         # Origin in screen coordinates (bottom-left in physics)
         self.origin_x = self.screen_width // 2
         self.origin_y = self.screen_height - 100
-
-        # Trajectory tracking
-        self.trajectory = []
-
-        # Heatmap surface
-        self.heatmap_surface = None
 
         # Counters
         self.n_near_borders = 0
@@ -239,7 +238,79 @@ class UnderwaterDroneEnv(gym.Env):
         self.n_resets = 0
         self.avoidance_score = np.inf
         # Reset the environment
-        self.reset()
+
+
+
+        # Trajectory & heatmap
+        self.trajectory       = []
+        self.heatmap_surface  = None
+
+        # — Water‐line setup (Tank style, full width) —
+        # rng seeded for reproducibility
+        rng = np.random.RandomState(seed)
+
+        # ten horizontal levels, jittered slightly
+        y_lines = np.linspace(0.2, TOP_Y - 0.2, 10)
+        y_lines += (rng.rand(len(y_lines)) - 0.5) * 0.2
+
+        # build segments at each level
+        self.water_segments = []
+        for y in y_lines:
+            segs = []
+            for _ in range(5):
+                length = rng.uniform(0.1, 0.3)                       # each dash length
+                start  = rng.uniform(-MAX_X, MAX_X - length)
+                segs.append((start, start + length))
+            self.water_segments.append((y, segs))
+
+        # drift speed for the lines
+        self.water_drift_speed = 0.35
+
+        # will be filled in _setup_rendering()
+        self._water_lines = []
+
+
+        # Shrink nose triangle
+        self.nose_len    = 0.12
+        self.nose_half_w = 0.07
+        self.nose_local_coords = np.array([
+            [ self.nose_len,  0.0 ],
+            [         0.0,  self.nose_half_w ],
+            [         0.0, -self.nose_half_w ],
+        ])
+
+        # Prepare water‐line state immediately:
+        self._water_lines = []
+        for y, segs in self.water_segments:
+            for xs, xe in segs:
+                self._water_lines.append([y, xs, xe])
+
+        # how much to crop left/right (15% default; increase to crop more)
+        self.crop_frac     = 0.18
+
+        
+        # cropping fractions for rgb_array output
+        self.crop_top_frac    = 0.20
+        self.crop_bottom_frac = 0.10
+        self.crop_left_frac   = 0.30
+        self.crop_right_frac  = 0.30  
+
+
+        # Water‐surface wave parameters
+        self.wave_amplitude = 5                   # pixels of peak‐to‐peak wiggle
+        self.wave_length    = 200                 # pixels between repeats
+        self.wave_speed     = 2.0                 # cycles per second
+
+        # High-quality heatmap settings
+        self._heat_N = 255   # number of y-samples
+        self._heat_M = 20    # number of gradient rings
+        self._heat_max_alpha = 200
+        self._heat_shrink = 0.91  # outer ring is 100%, inner is 90%
+
+        # Finish init by resetting
+        self.reset(seed=seed)
+
+
 
     def reset(
         self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None
@@ -263,6 +334,20 @@ class UnderwaterDroneEnv(gym.Env):
         self.n_in_high_cost_area = 0
         self.avoidance_score = np.inf
         return self._get_obs(), self._get_info()
+    
+    
+    def _draw_water_wave(self):
+        """Draw a small sine‐wave exactly at the hole y = TOP_Y."""
+        y0 = self.to_pixels_y(TOP_Y)
+        t  = pygame.time.get_ticks() / 1000.0
+        pts = []
+        for px in range(0, self.screen_width + 1, 10):
+            xw    = (px - self.origin_x) / self.scale_factor
+            theta = 2*np.pi*(xw*self.scale_factor/self.wave_length - self.wave_speed*t)
+            yoff  = self.wave_amplitude * np.sin(theta)
+            pts.append((px, int(y0 + yoff)))
+        pygame.draw.lines(self.screen, (255,255,255,120), False, pts, 2)
+
 
     def step(
         self, action: np.ndarray
@@ -361,9 +446,41 @@ class UnderwaterDroneEnv(gym.Env):
             "avoidance_score": np.copy(self.avoidance_score),
         }
 
+
     def _setup_rendering(self):
         if self.render_mode is None:
             return
+        if self.screen is None:
+            pygame.init()
+            if self.render_mode == "human":
+                pygame.display.init()
+                self.screen = pygame.display.set_mode(
+                    (self.screen_width, self.screen_height)
+                )
+                pygame.display.set_caption("Underwater Drone Simulator")
+            else:  # rgb_array
+                self.screen = pygame.Surface((self.screen_width, self.screen_height))
+            self.clock = pygame.time.Clock()
+
+        grad = pygame.Surface((self.screen_width, self.screen_height))
+        for py in range(self.screen_height):
+            r = py / (self.screen_height - 1)
+            if r < 0.2:
+                # white → lightblue
+                t, c0, c1 = r/0.2, (255,255,255), (173,216,230)
+            else:
+                # lightblue → darkwater
+                t, c0, c1 = (r-0.2)/0.8, (173,216,230), (25,25,150)
+            color = tuple(int(c0[i]*(1-t) + c1[i]*t) for i in range(3))
+            grad.fill(color, (0, py, self.screen_width, 1))
+        self.water_gradient_surface = grad
+        # build the half-ellipse heatmap
+        self._create_heatmap()
+        
+        # —————— Initialize water-line positions ——————
+        self._water_lines = [
+            [y, xs, xe] for y, segs in self.water_segments for xs, xe in segs
+        ]
 
         if self.screen is None and self.render_mode in ["human", "rgb_array"]:
             pygame.init()
@@ -382,184 +499,154 @@ class UnderwaterDroneEnv(gym.Env):
             self._create_heatmap()
 
     def _create_heatmap(self):
-        """Create a surface with the ellipse visualization based on _is_in_spot method"""
+        """
+        Draw a static half‐region matching:
+          drone.x/a² + (drone.y−b)²/b² ≤ 1
+        with a smooth Gaussian fade.
+        """
         if self.screen is None:
             return
 
-        # Create a transparent surface for the heatmap
-        self.heatmap_surface = pygame.Surface(
-            (self.screen_width, self.screen_height), pygame.SRCALPHA
+        a2 = self.semimajor_axis ** 2
+        b2 = self.semiminor_axis ** 2
+        b0 = TOP_Y / 2
+
+        surf = pygame.Surface(
+            (self.screen_width, self.screen_height),
+            pygame.SRCALPHA,
         )
+        N = self._heat_N   # e.g. 200
+        M = self._heat_M   # e.g. 20
 
-        # Ellipse parameters
-        ellipse_center_x = 0.0
-        ellipse_center_y = TOP_Y / 2
-        ellipse_a = self.semimajor_axis  # semi-major axis
-        ellipse_b = self.semiminor_axis  # semi-minor axis
+        for ring in range(M):
+            t     = ring / (M - 1)   # 0 → 1
+            alpha = int(self._heat_max_alpha * np.exp(-0.5 * (t/0.5)**2))
+            scale = 1.0 - (1.0 - self._heat_shrink) * t
 
-        # Convert ellipse parameters to screen coordinates
-        ellipse_center_px = self.to_pixels_x(ellipse_center_x)
-        ellipse_center_py = self.to_pixels_y(ellipse_center_y)
-        ellipse_width = int(2 * ellipse_a * self.scale_factor)
-        ellipse_height = int(2 * ellipse_b * self.scale_factor)
+            pts = []
+            for i in range(N):
+                y = (i / (N - 1)) * TOP_Y
+                # compute exactly: x_bound such that x_bound/a² + (y−b0)²/b² = 1
+                val = 1 - ((y - b0)**2) / b2
+                if val < 0:
+                    continue
+                x_bound = a2 * val    # NOTE: linear in x, matches your _is_in_high_cost_area
+                x_bound *= scale      # shrink for gradient ring
+                # add the point on the right boundary
+                pts.append((self.to_pixels_x(x_bound),
+                            self.to_pixels_y(y)))
 
-        # Calculate the rectangle that bounds the ellipse
-        ellipse_rect = pygame.Rect(
-            ellipse_center_px - ellipse_width // 2,
-            ellipse_center_py - ellipse_height // 2,
-            ellipse_width,
-            ellipse_height,
-        )
+            # close polygon down the left wall of the tank
+            pts += [
+                (self.to_pixels_x(-MAX_X), self.to_pixels_y(TOP_Y)),
+                (self.to_pixels_x(-MAX_X), self.to_pixels_y(0.0)),
+            ]
 
-        # Draw the ellipse with a semi-transparent fill
-        pygame.draw.ellipse(
-            self.heatmap_surface, (255, 0, 0, 80), ellipse_rect  # Red with alpha
-        )
+            # fill it
+            pygame.draw.polygon(surf, (255, 0, 0, alpha), pts)
 
-        # Draw the ellipse outline
-        pygame.draw.ellipse(
-            self.heatmap_surface,
-            (255, 0, 0, 160),  # Red with higher alpha for the outline
-            ellipse_rect,
-            width=2,
-        )
+        self.heatmap_surface = surf
+
+    def _draw_target_halo(self):
+        """A pulsing cyan circle over the hole at the surface."""
+        hole_half = self.drone.hole_width / 2.0
+        cx = self.to_pixels_x(0.0)
+        cy = self.to_pixels_y(TOP_Y)
+        t  = pygame.time.get_ticks() / 1000.0
+        base_r = hole_half * self.scale_factor * 0.9
+        r = int(base_r + 3)
+        pygame.draw.circle(self.screen, (0,255,255,80), (cx,cy), r, width=0)
+
+    def _update_water_lines(self, dt):
+        new_lines = []
+        for y, xs, xe in self._water_lines:
+            xs2 = xs + self.water_drift_speed * dt
+            xe2 = xe + self.water_drift_speed * dt
+
+            # wrap when the entire dash has left the right wall
+            if xs2 >=  MAX_X:
+                xs2 -= 2 * MAX_X     # jump back to the left wall
+                xe2 -= 2 * MAX_X
+            # draw
+            px1 = self.to_pixels_x(xs2)
+            py  = self.to_pixels_y(y)
+            px2 = self.to_pixels_x(xe2)
+            pygame.draw.line(self.screen, (255,255,255,120),
+                             (px1,py),(px2,py), 2)
+            new_lines.append([y, xs2, xe2])
+        self._water_lines = new_lines
 
     def render(self) -> Optional[np.ndarray]:
         if self.render_mode is None:
             return None
-
         if self.screen is None:
             self._setup_rendering()
 
-        # Fill the screen with a blue background (water)
-        self.screen.fill((25, 25, 150))
+        # 1) Draw the vertical water gradient
+        self.screen.blit(self.water_gradient_surface, (0, 0))
 
-        # Draw the top surface and hole
-        pygame.draw.rect(
-            self.screen,
-            (135, 206, 235),  # Sky blue
-            pygame.Rect(
-                0, 0, self.screen_width, self.screen_height - self.to_pixels_y(TOP_Y)
-            ),
-        )
+        # 2) Water lines under surface
+        self._update_water_lines(TIME_STEP_SIZE)
 
-        # Draw the hole
-        hole_half_width = self.drone.hole_width / 2.0
-        hole_left = self.to_pixels_x(-hole_half_width)
-        hole_right = self.to_pixels_x(hole_half_width)
-        hole_top = self.to_pixels_y(TOP_Y)
-        pygame.draw.rect(
-            self.screen,
-            (25, 25, 150),  # Water color
-            pygame.Rect(hole_left, 0, hole_right - hole_left, hole_top),
-        )
-
-        # Draw the heatmap
+        # 3) Gaussian obstacle
         if self.heatmap_surface is not None:
             self.screen.blit(self.heatmap_surface, (0, 0))
 
-        # Draw environment boundaries with thick black lines
-        # Left boundary
-        pygame.draw.line(
-            self.screen,
-            (0, 0, 0),  # Black
-            (self.to_pixels_x(-MAX_X), self.to_pixels_y(0)),
-            (self.to_pixels_x(-MAX_X), self.to_pixels_y(TOP_Y)),
-            4,  # Line thickness
-        )
-        # Right boundary
-        pygame.draw.line(
-            self.screen,
-            (0, 0, 0),  # Black
-            (self.to_pixels_x(MAX_X), self.to_pixels_y(0)),
-            (self.to_pixels_x(MAX_X), self.to_pixels_y(TOP_Y)),
-            4,  # Line thickness
-        )
-        # Bottom boundary
-        pygame.draw.line(
-            self.screen,
-            (0, 0, 0),  # Black
-            (self.to_pixels_x(-MAX_X), self.to_pixels_y(0)),
-            (self.to_pixels_x(MAX_X), self.to_pixels_y(0)),
-            4,  # Line thickness
-        )
-        # Top boundary (except the hole)
-        pygame.draw.line(
-            self.screen,
-            (0, 0, 0),  # Black
-            (self.to_pixels_x(-MAX_X), self.to_pixels_y(TOP_Y)),
-            (self.to_pixels_x(-hole_half_width), self.to_pixels_y(TOP_Y)),
-            4,  # Line thickness
-        )
-        pygame.draw.line(
-            self.screen,
-            (0, 0, 0),  # Black
-            (self.to_pixels_x(hole_half_width), self.to_pixels_y(TOP_Y)),
-            (self.to_pixels_x(MAX_X), self.to_pixels_y(TOP_Y)),
-            4,  # Line thickness
-        )
+        # 4) Hole halo & surface wiggle
+        self._draw_target_halo()
+        self._draw_water_wave()
 
-        # Draw trajectory as blue dotted line
+        # 5) Trajectory
         if len(self.trajectory) > 1:
-            points = [
-                (self.to_pixels_x(x), self.to_pixels_y(y)) for x, y in self.trajectory
-            ]
-            pygame.draw.lines(
-                self.screen,
-                (0, 0, 255),  # Blue
-                False,  # Not closed
-                points,
-                2,  # Line width
-            )
+            pts = [(self.to_pixels_x(x), self.to_pixels_y(y))
+                   for x, y in self.trajectory]
+            pygame.draw.lines(self.screen, (5,5,0), False, pts, 2)
+            for i, p in enumerate(pts):
+                if i % 3 == 0:
+                    pygame.draw.circle(self.screen, (255,255,255,120), p, 1)
 
-            # Add dotted effect
-            for i, point in enumerate(points):
-                if i % 3 == 0:  # Adjust spacing of dots
-                    pygame.draw.circle(
-                        self.screen, (255, 255, 255), point, 1  # White  # Dot radius
-                    )
-
-        # Draw the drone body
+        # 6) Drone body & protruding nose
         pygame.draw.circle(
-            self.screen,
-            (0, 100, 0),  # Dark green
+            self.screen, (0,180,180),
             (self.to_pixels_x(self.drone.x), self.to_pixels_y(self.drone.y)),
             int(self.drone.radius * self.scale_factor),
         )
+        c, s = np.cos(self.drone.theta), np.sin(self.drone.theta)
+        R    = np.array([[c, -s], [s, c]])
+        tri  = (R @ self.drone.nose_local_coords.T).T + [self.drone.x, self.drone.y]
+        tri_px = [(self.to_pixels_x(x), self.to_pixels_y(y)) for x, y in tri]
+        pygame.draw.polygon(self.screen, (139,0,0), tri_px)
 
-        # Draw the drone nose
-        c = np.cos(self.drone.theta)
-        s = np.sin(self.drone.theta)
-        R = np.array([[c, -s], [s, c]])
-
-        tri_world = (R @ self.drone.nose_local_coords.T).T + np.array(
-            [self.drone.x, self.drone.y]
-        )
-        tri_pixels = [
-            (self.to_pixels_x(point[0]), self.to_pixels_y(point[1]))
-            for point in tri_world
-        ]
-
-        pygame.draw.polygon(self.screen, (139, 0, 0), tri_pixels)  # Dark red
-
+        # 7) Output: human or cropped rgb_array
         if self.render_mode == "human":
             pygame.event.pump()
             pygame.display.flip()
             self.clock.tick(self.metadata["render_fps"])
+        else:  # rgb_array
+            full_surf = self.screen                     # window-sized surface
+            h, w      = self.screen_height, self.screen_width
 
-        elif self.render_mode == "rgb_array":
-            return np.transpose(
-                np.array(pygame.surfarray.pixels3d(self.screen)), axes=(1, 0, 2)
-            )
+            # use the fractions you already store on the object
+            top    = int(self.crop_top_frac    * h)
+            bottom = h - int(self.crop_bottom_frac * h)
+            left   = int(self.crop_left_frac   * w)
+            right  = w - int(self.crop_right_frac  * w)
+
+            # grab the cropped view (no copy) and convert to NumPy
+            region = full_surf.subsurface(pygame.Rect(left, top,
+                                                      right-left, bottom-top))
+
+            # no re-scaling → no distortion, full native resolution
+            return pygame.surfarray.array3d(region).transpose(1, 0, 2)
+
 
     def to_pixels_x(self, x: float) -> int:
-        return int(self.origin_x + x * self.scale_factor)
-
+        return int(self.origin_x + x*self.scale_factor)
     def to_pixels_y(self, y: float) -> int:
-        return int(self.origin_y - y * self.scale_factor)
+        return int(self.origin_y - y*self.scale_factor)
 
     def close(self):
-        if self.screen is not None:
+        if self.screen:
             pygame.display.quit()
             pygame.quit()
             self.screen = None
