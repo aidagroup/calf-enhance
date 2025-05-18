@@ -291,9 +291,9 @@ class UnderwaterDroneEnv(gym.Env):
         
         # cropping fractions for rgb_array output
         self.crop_top_frac    = 0.20
-        self.crop_bottom_frac = 0.10
-        self.crop_left_frac   = 0.30
-        self.crop_right_frac  = 0.30  
+        self.crop_bottom_frac = 0.09
+        self.crop_left_frac   = 0.25
+        self.crop_right_frac  = 0.25  
 
 
         # Water‐surface wave parameters
@@ -306,6 +306,18 @@ class UnderwaterDroneEnv(gym.Env):
         self._heat_M = 20    # number of gradient rings
         self._heat_max_alpha = 200
         self._heat_shrink = 0.91  # outer ring is 100%, inner is 90%
+
+        # optional axes overlay
+        self.show_axes      = False
+        self.axes_tick_step = 0.5
+
+        # make sure font module is ready *before* we create the Font object
+        pygame.font.init()                   # <-- add
+        self._font = pygame.font.SysFont(None, 16)
+
+
+        self.show_target_icon = True   # set False if you want to hide the icon
+
 
         # Finish init by resetting
         self.reset(seed=seed)
@@ -335,7 +347,15 @@ class UnderwaterDroneEnv(gym.Env):
         self.avoidance_score = np.inf
         return self._get_obs(), self._get_info()
     
-    
+
+
+    # ------------------------------------------------------------------
+    def set_axes(self, flag: bool = True, step: float | None = None):
+        """Turn axes overlay on/off; optionally set tick step (physics units)."""
+        self.show_axes = bool(flag)
+        if step is not None:
+            self.axes_tick_step = float(step)
+
     def _draw_water_wave(self):
         """Draw a small sine‐wave exactly at the hole y = TOP_Y."""
         y0 = self.to_pixels_y(TOP_Y)
@@ -498,64 +518,104 @@ class UnderwaterDroneEnv(gym.Env):
             # Create heatmap surface
             self._create_heatmap()
 
+
+
+
+
     def _create_heatmap(self):
-        """
-        Draw a static half‐region matching:
-          drone.x/a² + (drone.y−b)²/b² ≤ 1
-        with a smooth Gaussian fade.
-        """
+        """Exact half-ellipse fade + visible lime-green bubbles (using randint) + raft."""
         if self.screen is None:
             return
 
-        a2 = self.semimajor_axis ** 2
-        b2 = self.semiminor_axis ** 2
-        b0 = TOP_Y / 2
+        # Ellipse/cost params
+        a2 = self.semimajor_axis ** 2    # 0.9²
+        b2 = self.semiminor_axis ** 2    # 0.6²
+        b0 = TOP_Y / 2.0                 # 2.0
 
-        surf = pygame.Surface(
-            (self.screen_width, self.screen_height),
-            pygame.SRCALPHA,
-        )
-        N = self._heat_N   # e.g. 200
-        M = self._heat_M   # e.g. 20
+        W, H = self.screen_width, self.screen_height
+        surf = pygame.Surface((W, H), pygame.SRCALPHA)
 
-        for ring in range(M):
-            t     = ring / (M - 1)   # 0 → 1
-            alpha = int(self._heat_max_alpha * np.exp(-0.5 * (t/0.5)**2))
-            scale = 1.0 - (1.0 - self._heat_shrink) * t
+        # 1) per-pixel light→dark green fade (forest green)
+        light = (44, 138, 44)   # light green
+        dark  = (0, 100, 0)       # dark green
+        for py in range(H):
+            y = (self.origin_y - py) / self.scale_factor
+            for px in range(W):
+                x = (px - self.origin_x) / self.scale_factor
+                val = x / a2 + ((y - b0) ** 2) / b2
+                if val <= 1.0:
+                    t = val  # fade from center to boundary
+                    alpha = int(200 * (1.0 - t))  # semi-transparent, not max
+                    # Blend color between light and dark green
+                    r = int(light[0] * (1 - t) + dark[0] * t)
+                    g = int(light[1] * (1 - t) + dark[1] * t)
+                    b = int(light[2] * (1 - t) + dark[2] * t)
+                    # Clamp
+                    r = max(0, min(255, r))
+                    g = max(0, min(255, g))
+                    b = max(0, min(255, b))
+                    alpha = max(0, min(255, alpha))
+                    surf.set_at((px, py), (r, g, b, alpha))
 
-            pts = []
-            for i in range(N):
-                y = (i / (N - 1)) * TOP_Y
-                # compute exactly: x_bound such that x_bound/a² + (y−b0)²/b² = 1
-                val = 1 - ((y - b0)**2) / b2
-                if val < 0:
-                    continue
-                x_bound = a2 * val    # NOTE: linear in x, matches your _is_in_high_cost_area
-                x_bound *= scale      # shrink for gradient ring
-                # add the point on the right boundary
-                pts.append((self.to_pixels_x(x_bound),
-                            self.to_pixels_y(y)))
+        # 2) random toxin bubbles in lime-green (denser in the middle)
+        num_bubbles = 100
+        for _ in range(num_bubbles):
+            # Uniform sampling of y
+            y = self.rng.uniform(0.0, TOP_Y)
+            val = 1.0 - ((y - b0) ** 2) / b2
+            if val <= 0:
+                continue
+            x_bound = a2 * val
+            # sample x from -x_bound to +x_bound (full region)
+            x = self.rng.uniform(-x_bound, x_bound)
+            # You can bias bubbles away from the boundary if you wish (e.g., multiply val)
+            px = self.to_pixels_x(x)
+            py = self.to_pixels_y(y)
+            r  = self.rng.randint(3, 7)
+            # Brighter lime-green
+            pygame.draw.circle(surf, (80, 255, 120, 120), (px, py), r)
 
-            # close polygon down the left wall of the tank
-            pts += [
-                (self.to_pixels_x(-MAX_X), self.to_pixels_y(TOP_Y)),
-                (self.to_pixels_x(-MAX_X), self.to_pixels_y(0.0)),
-            ]
-
-            # fill it
-            pygame.draw.polygon(surf, (255, 0, 0, alpha), pts)
+        # 3) raft at the hole using HOLE_WIDTH
+        raft_w = int(HOLE_WIDTH * self.scale_factor)
+        raft_h = int(0.05 * self.scale_factor)
+        cx = self.to_pixels_x(0.0)
+        cy = self.to_pixels_y(TOP_Y)
+        raft = pygame.Rect(cx - raft_w // 2, cy, raft_w, raft_h)
+        pygame.draw.rect(surf, (139, 69, 19), raft, border_radius=4)
 
         self.heatmap_surface = surf
 
-    def _draw_target_halo(self):
-        """A pulsing cyan circle over the hole at the surface."""
-        hole_half = self.drone.hole_width / 2.0
+
+
+
+
+
+
+
+
+
+    # -------------------------------------------------------------
+    def _draw_target_icon(self):
+        """Draw a small coloured flag at the hole to label the safe area."""
+        if not self.show_target_icon:
+            return
         cx = self.to_pixels_x(0.0)
         cy = self.to_pixels_y(TOP_Y)
-        t  = pygame.time.get_ticks() / 1000.0
-        base_r = hole_half * self.scale_factor * 0.9
-        r = int(base_r + 3)
-        pygame.draw.circle(self.screen, (0,255,255,80), (cx,cy), r, width=0)
+
+        pole_h   = 28
+        pole_w   = 3
+        flag_w   = 16
+        flag_h   = 12
+        # pole
+        pygame.draw.rect(self.screen, (80, 80, 80),
+                         (cx, cy-pole_h, pole_w, pole_h))
+        # flag rectangle (bright orange)
+        pygame.draw.rect(self.screen, (255,140,0),
+                         (cx+pole_w, cy-pole_h+2, flag_w, flag_h))
+        # black border around flag
+        pygame.draw.rect(self.screen, (0,0,0),
+                         (cx+pole_w, cy-pole_h+2, flag_w, flag_h), 1)
+
 
     def _update_water_lines(self, dt):
         new_lines = []
@@ -593,7 +653,7 @@ class UnderwaterDroneEnv(gym.Env):
             self.screen.blit(self.heatmap_surface, (0, 0))
 
         # 4) Hole halo & surface wiggle
-        self._draw_target_halo()
+        self._draw_target_icon()
         self._draw_water_wave()
 
         # 5) Trajectory
@@ -616,6 +676,37 @@ class UnderwaterDroneEnv(gym.Env):
         tri  = (R @ self.drone.nose_local_coords.T).T + [self.drone.x, self.drone.y]
         tri_px = [(self.to_pixels_x(x), self.to_pixels_y(y)) for x, y in tri]
         pygame.draw.polygon(self.screen, (139,0,0), tri_px)
+
+        # 6½) axes with ticks / values --------------------------------------
+        if self.show_axes:
+            # axis lines
+            pygame.draw.line(self.screen,(0,0,0),
+                             (self.to_pixels_x(-MAX_X), self.to_pixels_y(0)),
+                             (self.to_pixels_x(MAX_X),  self.to_pixels_y(0)),1)
+            pygame.draw.line(self.screen,(0,0,0),
+                             (self.to_pixels_x(0), self.to_pixels_y(0)),
+                             (self.to_pixels_x(0), self.to_pixels_y(TOP_Y)),1)
+
+            # ticks & numeric labels
+            step = self.axes_tick_step
+            # X-axis ticks every 'step' units
+            x_vals = np.arange(-MAX_X, MAX_X+1e-6, step)
+            for x in x_vals:
+                px = self.to_pixels_x(x)
+                py = self.to_pixels_y(0)
+                pygame.draw.line(self.screen,(0,0,0),(px,py-3),(px,py+3),1)
+                lbl = self._font.render(f"{x:.1f}", True, (0,0,0))
+                self.screen.blit(lbl, lbl.get_rect(center=(px, py+12)))
+            # Y-axis ticks
+            y_vals = np.arange(0, TOP_Y+1e-6, step)
+            for y in y_vals:
+                px = self.to_pixels_x(0)
+                py = self.to_pixels_y(y)
+                pygame.draw.line(self.screen,(0,0,0),(px-3,py),(px+3,py),1)
+                lbl = self._font.render(f"{y:.1f}", True, (0,0,0))
+                self.screen.blit(lbl, lbl.get_rect(center=(px-18, py)))
+
+
 
         # 7) Output: human or cropped rgb_array
         if self.render_mode == "human":

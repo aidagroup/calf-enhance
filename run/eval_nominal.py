@@ -128,6 +128,9 @@ def main():
     capture_video = True
     env_fn = make_env(env_id, seed, capture_video)
     env = env_fn()
+    
+    # Optional -------------------------------------------------------
+    env.set_axes(True, step=1.0)   # show axes with unit ticks
 
     # Reset the environment
     observation, info = env.reset(seed=seed)
