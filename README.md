@@ -13,6 +13,8 @@ Key features:
 - Goal-oriented task (navigate to the surface opening)
 - Compatible with the Gymnasium API
 
+In this branch we will enhance the animations.
+
 ## Installation
 
 ```bash

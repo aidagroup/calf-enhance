@@ -128,6 +128,9 @@ def main():
     capture_video = True
     env_fn = make_env(env_id, seed, capture_video)
     env = env_fn()
+    
+    # Optional -------------------------------------------------------
+    env.set_axes(True, step=1.0)   # show axes with unit ticks
 
     # Reset the environment
     observation, info = env.reset(seed=seed)
@@ -143,7 +146,7 @@ def main():
 
         # Apply action
         observation, reward, terminated, truncated, info = env.step(action)
-        if info["is_in_spot"]:
+        if info["is_in_high_cost_area"]:
             n_in_spot += 1
         total_reward += reward
 
