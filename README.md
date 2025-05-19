@@ -1,6 +1,6 @@
-# CALFQ-TD3: Constrained Actor Learning with Feasibility Quantification for TD3
+# CALFQ-TD3
 
-![Demo](calf-td3-demo.gif)
+![Demo](gfx/calf-td3-demo.gif)
 
 ## Overview
 
