@@ -1,78 +1,119 @@
-# Underwater Drone Environment
+# CALFQ-TD3: Constrained Actor Learning with Feasibility Quantification for TD3
 
-A Gymnasium environment for an underwater drone simulation with Pygame rendering.
+![Demo](calf-td3-demo.gif)
 
-## Description
+## Overview
 
-The Underwater Drone Environment simulates a drone in an underwater environment that must navigate toward a surface opening. The drone has control over longitudinal (forward/backward) and lateral (left/right) thrust.
+This repository implements CALFQ-TD3, a novel reinforcement learning algorithm that combines Constrained Actor Learning with Feasibility Quantification (CALFQ) and Twin Delayed Deep Deterministic Policy Gradient (TD3). The project focuses on training agents to control an underwater drone environment while respecting safety constraints.
 
-Key features:
-- Realistic physics with water drag
-- Momentum-based movement
-- Pygame visualization
-- Goal-oriented task (navigate to the surface opening)
-- Compatible with the Gymnasium API
+## Features
 
-In this branch we will enhance the animations.
+- Implementation of CALFQ-TD3 algorithm
+- Underwater drone simulation environment
+- Training and evaluation scripts
+- Video generation and analysis tools
+- MLflow integration for experiment tracking
+
+## Requirements
+
+- Python >= 3.13
+- PyTorch >= 2.6.0
+- Stable-Baselines3 == 2.0.0
+- Additional dependencies listed in `pyproject.toml`
 
 ## Installation
 
+1. Clone the repository:
 ```bash
-# Install dependencies
-pip install numpy gymnasium pygame
+git clone https://github.com/yourusername/calfq-td3.git
+cd calfq-td3
+```
+
+2. Create and activate a virtual environment:
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Linux/Mac
+# or
+.venv\Scripts\activate  # On Windows
+```
+
+3. Install dependencies using Poetry:
+```bash
+poetry install
 ```
 
 ## Usage
 
-```python
-import gymnasium as gym
-from src.envs import UnderwaterDroneEnv
+### Training
 
-# Create environment
-env = UnderwaterDroneEnv(render_mode="human")
-
-# Reset environment
-observation, info = env.reset()
-
-# Step through environment
-for _ in range(1000):
-    action = env.action_space.sample()  # Or your policy
-    observation, reward, terminated, truncated, info = env.step(action)
-    
-    env.render()
-    
-    if terminated or truncated:
-        break
-
-env.close()
-```
-
-## Example
-
-An example script is provided in `examples/underwater_drone_demo.py`:
-
+To train the agent using CALFQ-TD3:
 ```bash
-python examples/underwater_drone_demo.py
+./run/train_calfq_5seeds.sh
 ```
 
-## Environment Details
+To train using standard TD3:
+```bash
+./run/train_td3_5seeds.sh
+```
 
-### Observation Space
-A 6-dimensional vector containing:
-- x position
-- y position
-- orientation (theta)
-- x velocity
-- y velocity
-- angular velocity (omega)
+### Evaluation
 
-### Action Space
-A 2-dimensional vector containing:
-- Longitudinal thrust (-MAX_F_LONG to MAX_F_LONG)
-- Lateral thrust (-MAX_F_LAT to MAX_F_LAT)
+To evaluate a trained model:
+```bash
+python run/eval_nominal.py
+```
 
-### Reward Function
-The reward function provides:
-- Small positive reward for each step the agent survives
-- Bonus reward based on height achieved
-- Negative reward if the drone gets frozen
+### Video Generation
+
+To generate videos from training data:
+```bash
+python run/json_to_video.py
+```
+
+To stack multiple videos:
+```bash
+./run/stack_videos.sh
+```
+
+## Project Structure
+
+```
+calfq-td3/
+├── src/
+│   ├── envs/
+│   │   └── underwaterdrone.py  # Underwater drone environment
+│   ├── utils/                  # Utility functions
+│   └── controller.py          # Controller implementation
+├── run/
+│   ├── train_calfq.py         # CALFQ-TD3 training script
+│   ├── train_td3.py           # TD3 training script
+│   ├── eval_nominal.py        # Evaluation script
+│   └── json_to_video.py       # Video generation script
+├── gfx/                       # Graphics and visualization
+└── pyproject.toml            # Project dependencies
+```
+
+## Results
+
+The trained agents can be evaluated using the provided evaluation scripts. Results are tracked using MLflow and can be visualized in the `analysis.ipynb` notebook.
+
+## Citation
+
+If you use this code in your research, please cite:
+
+```bibtex
+@article{your-paper,
+  title={Your Paper Title},
+  author={Your Name},
+  journal={Journal Name},
+  year={2024}
+}
+```
+
+## License
+
+[Add your license information here]
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.

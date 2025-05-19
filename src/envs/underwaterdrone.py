@@ -26,6 +26,8 @@ class UnderwaterDrone:
         self,
         seed=None,
         random_generator=None,
+        init_x=None,
+        init_y=None,
         m=DRONE_MASS,
         I=DRONE_INERTIA,
         Cd=DRAG_COEFF,
@@ -48,6 +50,10 @@ class UnderwaterDrone:
         # Randomize initial state using the seeded generator
         self.x = self.rng.uniform(-MAX_X / 2, MAX_X / 2)
         self.y = self.rng.uniform(0, TOP_Y / 3.0)
+        if init_x is not None:
+            self.x = init_x
+        if init_y is not None:
+            self.y = init_y
         self.theta = self.rng.uniform(np.pi / 2 - np.pi / 20, np.pi / 2 + np.pi / 20)
         self.v_x = self.rng.uniform(-0.2, 0.2)
         self.v_y = self.rng.uniform(-0.2, 0.2)
@@ -190,7 +196,7 @@ class UnderwaterDroneEnv(gym.Env):
         "render_fps": int(1.0 / TIME_STEP_SIZE),
     }
 
-    def __init__(self, render_mode: Optional[str] = None, seed: Optional[int] = None):
+    def __init__(self, render_mode: Optional[str] = None, seed: Optional[int] = None, init_x=None, init_y=None):
         # Define observation space
         # State is (x, y, theta, v_x, v_y, omega)
         self.observation_space = spaces.Box(
@@ -214,7 +220,8 @@ class UnderwaterDroneEnv(gym.Env):
             high=np.array([MAX_F_LONG, MAX_F_LAT], dtype=np.float32),
             dtype=np.float32,
         )
-
+        self.init_x = init_x
+        self.init_y = init_y
         self.render_mode = render_mode
         self.screen = None
         self.clock = None
@@ -288,8 +295,8 @@ class UnderwaterDroneEnv(gym.Env):
         # cropping fractions for rgb_array output
         self.crop_top_frac = 0.20
         self.crop_bottom_frac = 0.09
-        self.crop_left_frac = 0.25
-        self.crop_right_frac = 0.25
+        self.crop_left_frac = 0.28
+        self.crop_right_frac = 0.28
 
         # Water‐surface wave parameters
         self.wave_amplitude = 5  # pixels of peak‐to‐peak wiggle
@@ -328,11 +335,11 @@ class UnderwaterDroneEnv(gym.Env):
         self.n_resets += 1
 
         if seed is not None:
-            self.drone = UnderwaterDrone(seed=seed)
+            self.drone = UnderwaterDrone(seed=seed, init_x=self.init_x, init_y=self.init_y)
         elif self.rng is not None:
-            self.drone = UnderwaterDrone(random_generator=self.rng)
+            self.drone = UnderwaterDrone(random_generator=self.rng, init_x=self.init_x, init_y=self.init_y)
         else:
-            self.drone = UnderwaterDrone()
+            self.drone = UnderwaterDrone(init_x=self.init_x, init_y=self.init_y)
 
         # Clear trajectory history
         self.trajectory = []
@@ -730,42 +737,42 @@ class UnderwaterDroneEnv(gym.Env):
                 color = (128, 200, 128, alpha)  # purplish-green
                 pygame.draw.circle(self.screen, color, (px, py), bub["r"])
 
-        # 6½) axes with ticks / values --------------------------------------
-        if self.show_axes:
-            # axis lines
-            pygame.draw.line(
-                self.screen,
-                (0, 0, 0),
-                (self.to_pixels_x(-MAX_X), self.to_pixels_y(0)),
-                (self.to_pixels_x(MAX_X), self.to_pixels_y(0)),
-                1,
-            )
-            pygame.draw.line(
-                self.screen,
-                (0, 0, 0),
-                (self.to_pixels_x(0), self.to_pixels_y(0)),
-                (self.to_pixels_x(0), self.to_pixels_y(TOP_Y)),
-                1,
-            )
+        # # 6½) axes with ticks / values --------------------------------------
+        # if self.show_axes:
+        #     # axis lines
+        #     pygame.draw.line(
+        #         self.screen,
+        #         (0, 0, 0),
+        #         (self.to_pixels_x(-MAX_X), self.to_pixels_y(0)),
+        #         (self.to_pixels_x(MAX_X), self.to_pixels_y(0)),
+        #         1,
+        #     )
+        #     pygame.draw.line(
+        #         self.screen,
+        #         (0, 0, 0),
+        #         (self.to_pixels_x(0), self.to_pixels_y(0)),
+        #         (self.to_pixels_x(0), self.to_pixels_y(TOP_Y)),
+        #         1,
+        #     )
 
-            # ticks & numeric labels
-            step = self.axes_tick_step
-            # X-axis ticks every 'step' units
-            x_vals = np.arange(-MAX_X, MAX_X + 1e-6, step)
-            for x in x_vals:
-                px = self.to_pixels_x(x)
-                py = self.to_pixels_y(0)
-                pygame.draw.line(self.screen, (0, 0, 0), (px, py - 3), (px, py + 3), 1)
-                lbl = self._font.render(f"{x:.1f}", True, (0, 0, 0))
-                self.screen.blit(lbl, lbl.get_rect(center=(px, py + 12)))
-            # Y-axis ticks
-            y_vals = np.arange(0, TOP_Y + 1e-6, step)
-            for y in y_vals:
-                px = self.to_pixels_x(0)
-                py = self.to_pixels_y(y)
-                pygame.draw.line(self.screen, (0, 0, 0), (px - 3, py), (px + 3, py), 1)
-                lbl = self._font.render(f"{y:.1f}", True, (0, 0, 0))
-                self.screen.blit(lbl, lbl.get_rect(center=(px - 18, py)))
+        #     # ticks & numeric labels
+        #     step = self.axes_tick_step
+        #     # X-axis ticks every 'step' units
+        #     x_vals = np.arange(-MAX_X, MAX_X + 1e-6, step)
+        #     for x in x_vals:
+        #         px = self.to_pixels_x(x)
+        #         py = self.to_pixels_y(0)
+        #         pygame.draw.line(self.screen, (0, 0, 0), (px, py - 3), (px, py + 3), 1)
+        #         lbl = self._font.render(f"{x:.1f}", True, (0, 0, 0))
+        #         self.screen.blit(lbl, lbl.get_rect(center=(px, py + 12)))
+        #     # Y-axis ticks
+        #     y_vals = np.arange(0, TOP_Y + 1e-6, step)
+        #     for y in y_vals:
+        #         px = self.to_pixels_x(0)
+        #         py = self.to_pixels_y(y)
+        #         pygame.draw.line(self.screen, (0, 0, 0), (px - 3, py), (px + 3, py), 1)
+        #         lbl = self._font.render(f"{y:.1f}", True, (0, 0, 0))
+        #         self.screen.blit(lbl, lbl.get_rect(center=(px - 18, py)))
 
         # 7) Output: human or cropped rgb_array
         if self.render_mode == "human":
