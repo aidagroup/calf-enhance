@@ -76,7 +76,7 @@ def json_to_video(json_file, output_file, fps=50):
 
 if __name__ == "__main__":
     # Example usage
-    json_file = f"/home/user/Repos/calfq-td3/run/mlruns/283352061287474666/104d90fa54b14952908033257381781d/artifacts/trajectories/0002954999.json"
+    json_file = f"/home/user/Repos/calfq-td3/run/mlruns/283352061287474666/104d90fa54b14952908033257381781d/artifacts/trajectories/0002993999.json"
     output_file = f"{RUN_PATH}/" + json_file.split("/")[-1].split(".")[0] + ".mp4"
     print(f"Input: {json_file}\nOutput: {output_file}")
     json_to_video(json_file, output_file) 
