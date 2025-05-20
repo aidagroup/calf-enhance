@@ -1,16 +1,16 @@
-# CALFQ-TD3
+# CALF-TD3
 
 ![Demo](gfx/calf-td3-demo.gif)
 
 ## Overview
 
-This repository implements CALFQ-TD3, a novel reinforcement learning algorithm that combines Critic as Lyapunov Function approach and Twin Delayed Deep Deterministic Policy Gradient (TD3). The project focuses on training agents to control an underwater drone environment.
+This repository implements CALF-TD3, a novel reinforcement learning algorithm that combines Critic as Lyapunov Function approach and Twin Delayed Deep Deterministic Policy Gradient (TD3). The project focuses on training agents to control an underwater drone environment.
 
 ![Results](gfx/episode_return_calf_td3_vs_td3.png)
 
 ## Features
 
-- Implementation of CALFQ-TD3 algorithm
+- Implementation of CALF-TD3 algorithm
 - Underwater drone simulation environment
 - Training and evaluation scripts
 - Video generation and analysis tools
@@ -27,8 +27,8 @@ This repository implements CALFQ-TD3, a novel reinforcement learning algorithm t
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/calfq-td3.git
-cd calfq-td3
+git clone https://github.com/yourusername/CALF-td3.git
+cd CALF-td3
 ```
 
 2. Install uv:
@@ -40,9 +40,9 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 
 ### Training
 
-To train the agent using CALFQ-TD3:
+To train the agent using CALF-TD3:
 ```bash
-bash run/train_calfq_5seeds.sh
+bash run/train_CALF_5seeds.sh
 ```
 
 To train using standard TD3:
@@ -54,14 +54,14 @@ bash run/train_td3_5seeds.sh
 ## Project Structure
 
 ```
-calfq-td3/
+calf-enhance/
 ├── src/
 │   ├── envs/
 │   │   └── underwaterdrone.py  # Underwater drone environment
 │   ├── utils/                  # Utility functions
 │   └── controller.py          # Controller implementation
 ├── run/
-│   ├── train_calfq.py         # CALFQ-TD3 training script
+│   ├── train_CALF.py         # CALF-TD3 training script
 │   ├── train_td3.py           # TD3 training script
 │   ├── eval_nominal.py        # Evaluation script
 │   └── json_to_video.py       # Video generation script
