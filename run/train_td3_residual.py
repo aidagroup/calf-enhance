@@ -232,14 +232,13 @@ def main(args: Args):
                 actions = actor(torch.Tensor(obs).to(device))
                 actions += torch.normal(0, actor.action_scale * args.exploration_noise)
                 actions = actions.cpu().numpy()
-                actions += controller.get_action(obs)
                 actions = actions.clip(
                     envs.single_action_space.low, envs.single_action_space.high
                 )
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(
-            np.array(actions, dtype=float)
+            np.array(actions + controller.get_action(obs), dtype=float)
         )
         episode_trajectory.append(
             {
@@ -319,11 +318,7 @@ def main(args: Args):
                 ).clamp(-args.noise_clip, args.noise_clip) * target_actor.action_scale
 
                 next_state_actions = (
-                    torch.tensor(
-                        controller.get_action(data.next_observations.cpu().numpy())
-                    ).to(device)
-                    + target_actor(data.next_observations)
-                    + clipped_noise
+                    target_actor(data.next_observations) + clipped_noise
                 ).clamp(
                     envs.single_action_space.low[0], envs.single_action_space.high[0]
                 )
