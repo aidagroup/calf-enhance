@@ -1,14 +1,16 @@
-# CALFQ-TD3: Constrained Actor Learning with Feasibility Quantification for TD3
+# CALF-TD3
 
-![Demo](calf-td3-demo.gif)
+![Demo](gfx/calf-td3-demo.gif)
 
 ## Overview
 
-This repository implements CALFQ-TD3, a novel reinforcement learning algorithm that combines Constrained Actor Learning with Feasibility Quantification (CALFQ) and Twin Delayed Deep Deterministic Policy Gradient (TD3). The project focuses on training agents to control an underwater drone environment while respecting safety constraints.
+This repository implements CALF-TD3, a novel reinforcement learning algorithm that combines Critic as Lyapunov Function approach and Twin Delayed Deep Deterministic Policy Gradient (TD3). The project focuses on training agents to control an underwater drone environment.
+
+![Results](gfx/episode_return_calf_td3_vs_td3.png)
 
 ## Features
 
-- Implementation of CALFQ-TD3 algorithm
+- Implementation of CALF-TD3 algorithm
 - Underwater drone simulation environment
 - Training and evaluation scripts
 - Video generation and analysis tools
@@ -25,67 +27,41 @@ This repository implements CALFQ-TD3, a novel reinforcement learning algorithm t
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/calfq-td3.git
-cd calfq-td3
+git clone https://github.com/yourusername/CALF-td3.git
+cd CALF-td3
 ```
 
-2. Create and activate a virtual environment:
+2. Install uv:
 ```bash
-python -m venv .venv
-source .venv/bin/activate  # On Linux/Mac
-# or
-.venv\Scripts\activate  # On Windows
-```
-
-3. Install dependencies using Poetry:
-```bash
-poetry install
+curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
 ## Usage
 
 ### Training
 
-To train the agent using CALFQ-TD3:
+To train the agent using CALF-TD3:
 ```bash
-./run/train_calfq_5seeds.sh
+bash run/train_CALF_5seeds.sh
 ```
 
 To train using standard TD3:
 ```bash
-./run/train_td3_5seeds.sh
+bash run/train_td3_5seeds.sh
 ```
 
-### Evaluation
-
-To evaluate a trained model:
-```bash
-python run/eval_nominal.py
-```
-
-### Video Generation
-
-To generate videos from training data:
-```bash
-python run/json_to_video.py
-```
-
-To stack multiple videos:
-```bash
-./run/stack_videos.sh
-```
 
 ## Project Structure
 
 ```
-calfq-td3/
+calf-enhance/
 ├── src/
 │   ├── envs/
 │   │   └── underwaterdrone.py  # Underwater drone environment
 │   ├── utils/                  # Utility functions
 │   └── controller.py          # Controller implementation
 ├── run/
-│   ├── train_calfq.py         # CALFQ-TD3 training script
+│   ├── train_CALF.py         # CALF-TD3 training script
 │   ├── train_td3.py           # TD3 training script
 │   ├── eval_nominal.py        # Evaluation script
 │   └── json_to_video.py       # Video generation script
@@ -93,27 +69,12 @@ calfq-td3/
 └── pyproject.toml            # Project dependencies
 ```
 
-## Results
-
-The trained agents can be evaluated using the provided evaluation scripts. Results are tracked using MLflow and can be visualized in the `analysis.ipynb` notebook.
-
-## Citation
-
-If you use this code in your research, please cite:
-
-```bibtex
-@article{your-paper,
-  title={Your Paper Title},
-  author={Your Name},
-  journal={Journal Name},
-  year={2024}
-}
-```
-
 ## License
 
-[Add your license information here]
+Copyright (c) 2025 aidagroup
 
-## Contributing
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.

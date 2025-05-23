@@ -135,7 +135,7 @@ def main():
     seed = None
     env_id = "UnderwaterDrone-v0"
     capture_video = True
-    env_fn = make_env(env_id, seed, capture_video, init_x=-0.405, init_y=0.0251)
+    env_fn = make_env(env_id, seed, capture_video, init_x=-1.00609, init_y=0.28605)
     env = env_fn()
     # Optional -------------------------------------------------------
     env.set_axes(True, step=1.0)  # show axes with unit ticks
