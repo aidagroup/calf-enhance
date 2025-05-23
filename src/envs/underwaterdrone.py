@@ -196,7 +196,13 @@ class UnderwaterDroneEnv(gym.Env):
         "render_fps": int(1.0 / TIME_STEP_SIZE),
     }
 
-    def __init__(self, render_mode: Optional[str] = None, seed: Optional[int] = None, init_x=None, init_y=None):
+    def __init__(
+        self,
+        render_mode: Optional[str] = None,
+        seed: Optional[int] = None,
+        init_x=None,
+        init_y=None,
+    ):
         # Define observation space
         # State is (x, y, theta, v_x, v_y, omega)
         self.observation_space = spaces.Box(
@@ -335,9 +341,13 @@ class UnderwaterDroneEnv(gym.Env):
         self.n_resets += 1
 
         if seed is not None:
-            self.drone = UnderwaterDrone(seed=seed, init_x=self.init_x, init_y=self.init_y)
+            self.drone = UnderwaterDrone(
+                seed=seed, init_x=self.init_x, init_y=self.init_y
+            )
         elif self.rng is not None:
-            self.drone = UnderwaterDrone(random_generator=self.rng, init_x=self.init_x, init_y=self.init_y)
+            self.drone = UnderwaterDrone(
+                random_generator=self.rng, init_x=self.init_x, init_y=self.init_y
+            )
         else:
             self.drone = UnderwaterDrone(init_x=self.init_x, init_y=self.init_y)
 

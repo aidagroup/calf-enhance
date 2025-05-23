@@ -319,7 +319,11 @@ def main(args: Args):
                 ).clamp(-args.noise_clip, args.noise_clip) * target_actor.action_scale
 
                 next_state_actions = (
-                    target_actor(data.next_observations) + clipped_noise
+                    torch.tensor(
+                        controller.get_action(data.next_observations.cpu().numpy())
+                    ).to(device)
+                    + target_actor(data.next_observations)
+                    + clipped_noise
                 ).clamp(
                     envs.single_action_space.low[0], envs.single_action_space.high[0]
                 )

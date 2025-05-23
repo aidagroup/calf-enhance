@@ -18,10 +18,19 @@ from src.envs.underwaterdrone import (
 )
 
 
-def make_env(env_id, seed, capture_video=True, run_name="underwater_drone_demo", init_x=None, init_y=None):
+def make_env(
+    env_id,
+    seed,
+    capture_video=True,
+    run_name="underwater_drone_demo",
+    init_x=None,
+    init_y=None,
+):
     def thunk():
         if capture_video:
-            env = gym.make(env_id, render_mode="rgb_array", init_x=init_x, init_y=init_y)
+            env = gym.make(
+                env_id, render_mode="rgb_array", init_x=init_x, init_y=init_y
+            )
             videos_dir = Path(RUN_PATH) / "videos" / run_name
             videos_dir.mkdir(parents=True, exist_ok=True)
             env = gym.wrappers.RecordVideo(env, f"{videos_dir}")
