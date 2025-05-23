@@ -238,7 +238,11 @@ def main(args: Args):
 
         # TRY NOT TO MODIFY: execute the game and log data.
         next_obs, rewards, terminations, truncations, infos = envs.step(
-            np.array(actions + controller.get_action(obs), dtype=float)
+            np.array((actions + controller.get_action(obs)).clip(
+                    envs.single_action_space.low, envs.single_action_space.high
+                ),
+                dtype=float,
+            )
         )
         episode_trajectory.append(
             {
