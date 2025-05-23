@@ -237,17 +237,18 @@ def main(args: Args):
                 )
 
         # TRY NOT TO MODIFY: execute the game and log data.
-        next_obs, rewards, terminations, truncations, infos = envs.step(
-            np.array((actions + controller.get_action(obs)).clip(
+        actions_to_apply = np.array((actions + controller.get_action(obs)).clip(
                     envs.single_action_space.low, envs.single_action_space.high
                 ),
                 dtype=float,
             )
+        next_obs, rewards, terminations, truncations, infos = envs.step(
+            actions_to_apply
         )
         episode_trajectory.append(
             {
                 "obs": obs,
-                "actions": actions,
+                "actions": actions_to_apply,
             }
         )
         # TRY NOT TO MODIFY: record rewards for plotting purposes
