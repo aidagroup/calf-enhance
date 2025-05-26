@@ -72,7 +72,7 @@ class Args:
     """the threshold for the critic improvement"""
     calfq_p_relax_init: float = 0.8
     """the initial value of the p_relax parameter"""
-    calfq_p_relax_decay: float = 0.995
+    calfq_p_relax_decay: float = 0.99
     """the decay rate of the p_relax parameter"""
     calfq_anneal: bool = True
     """if toggled, the p_relax and p_relax_decay parameters will be annealed"""
