@@ -114,11 +114,11 @@ class LidarNavEnv(gym.Env):
         dist_to_goal = np.linalg.norm(self.robot_pos - self.goal_pos)
         reward = - 0.1 * dist_to_goal
         if dist_to_goal < self.goal_radius:
-            reward += 50.0
+            reward += 10.0
             done = True
 
         if self._check_collision():
-            reward -= 5.0  # Strong penalty but does not end episode
+            reward -= 15.0  # Strong penalty but does not end episode
 
         self.step_count += 1
         if self.step_count > 500:
