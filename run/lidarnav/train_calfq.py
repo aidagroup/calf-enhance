@@ -70,7 +70,7 @@ class Args:
     # Calfq specific arguments
     calfq_critic_improvement_threshold: float = 0.01
     """the threshold for the critic improvement"""
-    calfq_p_relax_init: float = 0.8
+    calfq_p_relax_init: float = 0.0
     """the initial value of the p_relax parameter"""
     calfq_p_relax_decay: float = 0.95
     """the decay rate of the p_relax parameter"""
