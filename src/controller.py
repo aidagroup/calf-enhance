@@ -55,10 +55,10 @@ class LidarNavController:
         self.kp_angle = kp_angle
         
     def get_action(self, obs):
-        robot_pos = obs[:2]
+        robot_pos = obs.reshape(-1)[:2]
         to_goal = self.goal_pos - robot_pos
         angle_to_goal = np.arctan2(to_goal[1], to_goal[0])
-        robot_angle = np.arctan2(obs[2], obs[3])
+        robot_angle = np.arctan2(obs.reshape(-1)[2], obs.reshape(-1)[3])
         angle_error = (angle_to_goal - robot_angle) % (2 * np.pi)
         if angle_error > np.pi:
             angle_error -= 2 * np.pi
@@ -68,4 +68,4 @@ class LidarNavController:
         omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
         v = self.max_velocity * np.cos(angle_error)
         v = max(0.1, v)
-        return np.array([v, omega])
+        return np.array([[v, omega]])
