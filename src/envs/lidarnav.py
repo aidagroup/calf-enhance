@@ -6,7 +6,7 @@ from gymnasium import spaces
 class LidarNavEnv(gym.Env):
     metadata = {'render_modes': ['human', 'rgb_array'], 'render_fps': 30}
 
-    def __init__(self, render_mode=None):
+    def __init__(self, render_mode=None, seed=None):
         super().__init__()
 
         self.width = 10.0
@@ -30,8 +30,7 @@ class LidarNavEnv(gym.Env):
         self.window = None
         self.clock = None
         self.window_size = 600
-        self.robot_pos = np.array([np.random.uniform(5.5, 9.5), np.random.uniform(0.5, 4.5)])
-        self._create_static_map()
+        self.reset(seed=seed)
 
     def _create_static_map(self):
         # Generate random obstacles in the left half of the map
