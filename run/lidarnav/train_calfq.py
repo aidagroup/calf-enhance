@@ -17,7 +17,7 @@ from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
 from collections import defaultdict, deque
-from src.controller import UnderwaterDroneNominalController
+from src.controller import LidarNavController
 
 
 @dataclass
@@ -222,8 +222,8 @@ def main(args: Args):
             )
             return torch_q_values.cpu().numpy()
 
-    if args.env_id.startswith("UnderwaterDrone"):
-        controller = UnderwaterDroneNominalController()
+    if args.env_id.startswith("LidarNav"):
+        controller = LidarNavController()
     else:
         raise ValueError(f"Environment {args.env_id} not supported")
 
