@@ -43,3 +43,29 @@ class UnderwaterDroneNominalController:
         F_lat = np.clip(F_lat, -MAX_F_LAT, MAX_F_LAT)
 
         return np.hstack([F_long, F_lat])
+
+
+class LidarNavController:
+    def __init__(self, kp_angle = 2.0):
+        from src.envs.lidarnav import LidarNavEnv
+        env = LidarNavEnv()
+        self.goal_pos = env.goal_pos
+        self.max_velocity = env.max_velocity
+        self.max_angular_velocity = env.max_angular_velocity 
+        self.kp_angle = kp_angle
+        
+    def get_action(self, obs):
+        robot_pos = obs[:2]
+        to_goal = self.goal_pos - robot_pos
+        angle_to_goal = np.arctan2(to_goal[1], to_goal[0])
+        robot_angle = np.arctan2(obs[2], obs[3])
+        angle_error = (angle_to_goal - robot_angle) % (2 * np.pi)
+        if angle_error > np.pi:
+            angle_error -= 2 * np.pi
+        
+        # Simple P controller for angular velocity
+        omega = self.kp_angle * angle_error
+        omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
+        v = self.max_velocity * np.cos(angle_error)
+        v = max(0.1, v)
+        return np.array([v, omega])

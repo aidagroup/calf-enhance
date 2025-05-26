@@ -10,3 +10,8 @@ gym.register(
     entry_point="src.envs:UnderwaterDroneEnv",
     max_episode_steps=1500,
 )
+
+gym.register(
+    id="LidarNav-v0",
+    entry_point="src.envs:LidarNavEnv",
+)
