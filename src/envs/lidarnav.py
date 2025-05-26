@@ -112,7 +112,7 @@ class LidarNavEnv(gym.Env):
         done = False
 
         dist_to_goal = np.linalg.norm(self.robot_pos - self.goal_pos)
-        reward = 0.1 * dist_to_goal
+        reward = - 0.1 * dist_to_goal
         if dist_to_goal < self.goal_radius:
             reward += 1.0
             done = True
