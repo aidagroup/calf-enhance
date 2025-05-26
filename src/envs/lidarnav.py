@@ -30,6 +30,8 @@ class LidarNavEnv(gym.Env):
         self.window = None
         self.clock = None
         self.window_size = 600
+        self.robot_pos = np.array([np.random.uniform(5.5, 9.5), np.random.uniform(0.5, 4.5)])
+        self._create_static_map()
         self.reset(seed=seed)
 
     def _create_static_map(self):
