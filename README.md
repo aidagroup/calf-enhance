@@ -4,7 +4,10 @@
 
 A Lyapunov-based model-free policy enhancement technique for reinforcement learning, demonstrated on the UnderwaterDrone-v0 environment.
 
-![Results](gfx/episode_return.png)
+
+<div align="center">
+  <img src="gfx/episode_return.png" alt="Results">
+</div>
 
 ## Quick Start
 
