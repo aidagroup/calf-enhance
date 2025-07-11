@@ -132,46 +132,43 @@ class Controller:
 
 def main():
     # Create the environment with video recording
-    seed = None
+    seed = 42
     env_id = "UnderwaterDrone-v0"
     capture_video = True
-    env_fn = make_env(env_id, seed, capture_video, init_x=-1.00609, init_y=0.28605)
+    env_fn = make_env(env_id, seed, capture_video=False)#, init_x=-1.00609, init_y=0.28605)
     env = env_fn()
     # Optional -------------------------------------------------------
     env.set_axes(True, step=1.0)  # show axes with unit ticks
 
     # Reset the environment
-    observation, info = env.reset(seed=seed)
+    
+    total_rewards = []
+    avoidance_scores = []
+    for i in range(1000):
+        observation, info = env.reset(seed=i)
 
-    controller = Controller()
+        controller = Controller()
 
-    # Run for 1000 steps or until terminated
-    total_reward = 0
-    n_in_spot = 0
-    for step in range(1500):
-        # Get action from controller
-        action = controller.get_action(observation)
+        # Run for 1000 steps or until terminated
+        total_reward = 0
+        n_in_spot = 0
+        truncated = False
+        while not truncated:
+            # Get action from controller
+            action = controller.get_action(observation)
 
-        # Apply action
-        observation, reward, terminated, truncated, info = env.step(action)
-        if info["is_in_high_cost_area"]:
-            n_in_spot += 1
-        total_reward += reward
-
-        # Check if episode is done
-        if terminated or truncated:
-            x, y, cos_theta, sin_theta, v_x, v_y, omega = observation
-            theta = np.arctan2(sin_theta, cos_theta)
-            print(f"\nEpisode finished after {step+1} steps")
-            print(f"Final position: x={info['x']:.2f}, y={info['y']:.2f}")
-            print(f"Final velocity: v_x={v_x:.2f}, v_y={v_y:.2f}")
-            print(
-                f"Final orientation: theta={theta:.2f} (target={np.pi/2:.2f}), omega={omega:.2f}"
-            )
-            print(f"Total reward: {total_reward:.2f}")
-            print(f"Number of times in spot: {n_in_spot/1500:.2f}")
-            break
-
+            # Apply action
+            observation, reward, terminated, truncated, info = env.step(action)
+            if info["is_in_high_cost_area"]:
+                n_in_spot += 1
+            total_reward += reward
+        avoidance_scores.append(info["avoidance_score"])
+        total_rewards.append(total_reward)
+        print(f"Total reward: {total_reward:.2f}")
+        print(f"Mean reward: {np.mean(total_rewards):.2f}")
+        print(f"Std reward: {np.std(total_rewards):.2f}")
+        print(f"Mean avoidance score: {np.mean(avoidance_scores):.2f}")
+        print(f"Std avoidance score: {np.std(avoidance_scores):.2f}")
     # Clean up
     env.close()
     print(f"Video saved to {RUN_PATH}/videos/underwater_drone_demo")
