@@ -1,6 +1,6 @@
 # A Lyapunov-based Model-Free Policy Enhancement Technique
 
-![Demo](gfx/calf-td3-demo.gif)
+![Demo](gfx/demo.gif)
 
 A Lyapunov-based model-free policy enhancement technique for reinforcement learning, demonstrated on the UnderwaterDrone-v0 environment.
 
