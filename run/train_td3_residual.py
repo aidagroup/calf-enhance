@@ -251,8 +251,9 @@ def main(args: Args):
         )
         episode_trajectory.append(
             {
-                "obs": obs,
-                "actions": actions_to_apply,
+                "obs": obs.copy(),
+                "actions": actions_to_apply.copy(),
+                "reward": np.array(rewards).copy(),
             }
         )
         # TRY NOT TO MODIFY: record rewards for plotting purposes
@@ -334,7 +335,12 @@ def main(args: Args):
                         json_name=f"{global_step:010d}.json",
                     )
                     if args.env_id.startswith("RobotNavigation"):
-                        log_robot_nav_trajectory(episode_trajectory, global_step)
+                        log_robot_nav_trajectory(
+                            episode_trajectory,
+                            global_step,
+                            total_reward=float(info["episode"]["r"]),
+                            goal_reached=bool(info.get("goal_reached", False)),
+                        )
                     episode_trajectory = []
                     break
 

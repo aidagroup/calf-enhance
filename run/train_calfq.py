@@ -281,8 +281,9 @@ def main(args: Args):
 
         episode_trajectory.append(
             {
-                "obs": obs,
-                "actions": current_actions,
+                "obs": obs.copy(),
+                "actions": current_actions.copy(),
+                "reward": np.array(rewards).copy(),
             }
         )
 
@@ -392,7 +393,12 @@ def main(args: Args):
                         json_name=f"{global_step:010d}.json",
                     )
                     if args.env_id.startswith("RobotNavigation"):
-                        log_robot_nav_trajectory(episode_trajectory, global_step)
+                        log_robot_nav_trajectory(
+                            episode_trajectory,
+                            global_step,
+                            total_reward=float(info["episode"]["r"]),
+                            goal_reached=bool(info.get("goal_reached", False)),
+                        )
                     episode_trajectory = []
                     break
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`

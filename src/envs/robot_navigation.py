@@ -193,6 +193,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             "last_action": self._last_action.copy(),
             "robot_angle": self.robot_angle,
             "in_obstacle": in_obstacle,
+            "goal_reached": terminated,
         }
 
         if self.render_mode == "human":

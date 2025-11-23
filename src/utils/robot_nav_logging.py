@@ -33,16 +33,39 @@ def _extract_robot_nav_arrays(episode_trajectory):
     return positions, goal, obstacles
 
 
-def log_robot_nav_trajectory(episode_trajectory, global_step, artifact_subdir="robot_navigation"):
+def _extract_total_reward(episode_trajectory):
+    total = 0.0
+    for step in episode_trajectory:
+        reward = step.get("reward", 0.0)
+        reward_arr = np.asarray(reward)
+        if reward_arr.size == 0:
+            continue
+        total += float(reward_arr.reshape(-1)[0])
+    return total
+
+
+def log_robot_nav_trajectory(
+    episode_trajectory,
+    global_step,
+    total_reward=None,
+    goal_reached=False,
+    artifact_subdir="robot_navigation",
+):
     positions, goal, obstacles = _extract_robot_nav_arrays(episode_trajectory)
     if positions is None:
         return
 
+    if total_reward is None:
+        total_reward = _extract_total_reward(episode_trajectory)
+
+    status = "Goal Reached" if goal_reached else "Goal Missed"
     fig, ax = plt.subplots(figsize=(5, 5))
     ax.set_xlim(0.0, 1.0)
     ax.set_ylim(0.0, 1.0)
     ax.set_aspect("equal")
-    ax.set_title(f"Robot Navigation Trajectory @ step {global_step}")
+    ax.set_title(
+        f"Robot Navigation Trajectory @ step {global_step}\nReturn={total_reward:.2f} | {status}"
+    )
     ax.set_xlabel("X")
     ax.set_ylabel("Y")
 
@@ -54,7 +77,6 @@ def log_robot_nav_trajectory(episode_trajectory, global_step, artifact_subdir="r
         circle = plt.Circle((x, y), radius, color="#ff9896", ec="#c44e52", alpha=0.5, linewidth=1.5)
         ax.add_patch(circle)
 
-    ax.legend(loc="upper right")
     ax.grid(True, alpha=0.3)
 
     with TemporaryDirectory() as tmpdir:
