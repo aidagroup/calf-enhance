@@ -12,7 +12,7 @@ This repository implements CALF-TD3, a novel reinforcement learning algorithm th
 
 - Implementation of CALF-TD3 algorithm
 - Underwater drone simulation environment
-- Robot navigation environment with a 2D pygame renderer
+- Robot navigation environment with a 2D pygame renderer (including an obstacle-free variant)
 - Training and evaluation scripts
 - Video generation and analysis tools
 - MLflow integration for experiment tracking
@@ -49,6 +49,16 @@ bash run/train_CALF_5seeds.sh
 To train using standard TD3:
 ```bash
 bash run/train_td3_5seeds.sh
+```
+
+### Robot Navigation Variants
+
+- `RobotNavigation-v0`: default configuration with randomly placed obstacles.
+- `RobotNavigationEmpty-v0`: same environment with `obstacle_count=0` (no obstacles).
+
+You can point any training/evaluation script to the empty field by overriding the id, e.g.:
+```bash
+uv run run/train_calfq.py --env-id=RobotNavigationEmpty-v0 --total-timesteps=1000000
 ```
 
 
