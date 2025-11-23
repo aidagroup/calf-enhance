@@ -15,3 +15,9 @@ gym.register(
     id="LidarNav-v0",
     entry_point="src.envs:LidarNavEnv",
 )
+
+gym.register(
+    id="RobotNavigation-v0",
+    entry_point="src.envs:RobotNavigationEnv",
+    max_episode_steps=300,
+)

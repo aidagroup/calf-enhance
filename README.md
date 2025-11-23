@@ -12,6 +12,7 @@ This repository implements CALF-TD3, a novel reinforcement learning algorithm th
 
 - Implementation of CALF-TD3 algorithm
 - Underwater drone simulation environment
+- Robot navigation environment with a 2D pygame renderer
 - Training and evaluation scripts
 - Video generation and analysis tools
 - MLflow integration for experiment tracking
@@ -57,7 +58,9 @@ bash run/train_td3_5seeds.sh
 calf-enhance/
 ├── src/
 │   ├── envs/
-│   │   └── underwaterdrone.py  # Underwater drone environment
+│   │   ├── underwaterdrone.py    # Underwater drone environment
+│   │   ├── lidarnav.py           # Lidar navigation environment
+│   │   └── robot_navigation.py   # Embedded robot navigation environment
 │   ├── utils/                  # Utility functions
 │   └── controller.py          # Controller implementation
 ├── run/
