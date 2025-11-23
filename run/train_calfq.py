@@ -17,7 +17,7 @@ from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
 from collections import defaultdict, deque
-from src.controller import UnderwaterDroneNominalController
+from src.controller import UnderwaterDroneNominalController, RobotNavigationGoalController
 
 
 @dataclass
@@ -224,6 +224,8 @@ def main(args: Args):
 
     if args.env_id.startswith("UnderwaterDrone"):
         controller = UnderwaterDroneNominalController()
+    elif args.env_id.startswith("RobotNavigation"):
+        controller = RobotNavigationGoalController()
     else:
         raise ValueError(f"Environment {args.env_id} not supported")
 
