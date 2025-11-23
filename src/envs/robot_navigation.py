@@ -32,7 +32,13 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
 
     metadata = {"render_modes": ["human", "rgb_array"], "render_fps": 30}
 
-    def __init__(self, *, render_mode: Optional[str] = None, config: Optional[RobotNavigationConfig] = None) -> None:
+    def __init__(
+        self,
+        *,
+        render_mode: Optional[str] = None,
+        config: Optional[RobotNavigationConfig] = None,
+        seed: Optional[int] = None,
+    ) -> None:
         super().__init__()
         if render_mode not in (None, "human", "rgb_array"):
             raise ValueError(f"Unsupported render_mode '{render_mode}'. Use None, 'human', or 'rgb_array'.")
@@ -70,7 +76,10 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         self._clock = None
         self._surface = None
 
-        self.np_random, _ = seeding.np_random(None)
+        if seed is None:
+            self.np_random, _ = seeding.np_random(None)
+        else:
+            self.np_random, _ = seeding.np_random(seed)
         self._rng = self.np_random
 
     def reset(
