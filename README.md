@@ -53,12 +53,13 @@ bash run/train_td3_5seeds.sh
 
 ### Robot Navigation Variants
 
-- `RobotNavigation-v0`: default configuration with randomly placed obstacles.
-- `RobotNavigationEmpty-v0`: same environment with `obstacle_count=0` (no obstacles).
+- `RobotNavigation-v0`: default configuration with randomly placed obstacles (4 by default).
+- `RobotNavigationSingle-v0`: single-obstacle variant (`obstacle_count=1`).
+- `RobotNavigationEmpty-v0`: obstacle-free variant (`obstacle_count=0`).
 
-You can point any training/evaluation script to the empty field by overriding the id, e.g.:
+You can point any training/evaluation script to a specific variant by overriding the id, e.g.:
 ```bash
-uv run run/train_calfq.py --env-id=RobotNavigationEmpty-v0 --total-timesteps=1000000
+uv run run/train_calfq.py --env-id=RobotNavigationSingle-v0 --total-timesteps=1000000
 ```
 
 
