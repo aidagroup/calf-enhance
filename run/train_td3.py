@@ -260,29 +260,58 @@ def main(args: Args):
                         global_step,
                     )
 
-                    mlflow.log_metric(
-                        "episode_stats/is_in_hole",
-                        info["is_in_hole"],
-                        global_step,
-                    )
-                    rolling_window["is_in_hole"].append(info["is_in_hole"])
-                    mlflow.log_metric(
-                        f"episode_stats/is_in_hole_rolling_{args.rolling_average_window}",
-                        np.mean(rolling_window["is_in_hole"]),
-                        global_step,
-                    )
+                    if args.env_id.startswith("UnderwaterDrone"):
+                        mlflow.log_metric(
+                            "episode_stats/is_in_hole",
+                            info["is_in_hole"],
+                            global_step,
+                        )
+                        rolling_window["is_in_hole"].append(info["is_in_hole"])
+                        mlflow.log_metric(
+                            f"episode_stats/is_in_hole_rolling_{args.rolling_average_window}",
+                            np.mean(rolling_window["is_in_hole"]),
+                            global_step,
+                        )
 
-                    mlflow.log_metric(
-                        "episode_stats/avoidance_score",
-                        info["avoidance_score"],
-                        global_step,
-                    )
-                    rolling_window["avoidance_score"].append(info["avoidance_score"])
-                    mlflow.log_metric(
-                        f"episode_stats/avoidance_score_rolling_{args.rolling_average_window}",
-                        np.mean(rolling_window["avoidance_score"]),
-                        global_step,
-                    )
+                        mlflow.log_metric(
+                            "episode_stats/avoidance_score",
+                            info["avoidance_score"],
+                            global_step,
+                        )
+                        rolling_window["avoidance_score"].append(info["avoidance_score"])
+                        mlflow.log_metric(
+                            f"episode_stats/avoidance_score_rolling_{args.rolling_average_window}",
+                            np.mean(rolling_window["avoidance_score"]),
+                            global_step,
+                        )
+                    elif args.env_id.startswith("RobotNavigation"):
+                        mlflow.log_metric(
+                            "episode_stats/distance_to_goal",
+                            info.get("distance_to_goal", 0.0),
+                            global_step,
+                        )
+                        rolling_window["distance_to_goal"].append(
+                            info.get("distance_to_goal", 0.0)
+                        )
+                        mlflow.log_metric(
+                            f"episode_stats/distance_to_goal_rolling_{args.rolling_average_window}",
+                            np.mean(rolling_window["distance_to_goal"]),
+                            global_step,
+                        )
+
+                        mlflow.log_metric(
+                            "episode_stats/in_obstacle",
+                            float(info.get("in_obstacle", False)),
+                            global_step,
+                        )
+                        rolling_window["in_obstacle"].append(
+                            float(info.get("in_obstacle", False))
+                        )
+                        mlflow.log_metric(
+                            f"episode_stats/in_obstacle_rolling_{args.rolling_average_window}",
+                            np.mean(rolling_window["in_obstacle"]),
+                            global_step,
+                        )
                     log_json_artifact(
                         episode_trajectory,
                         f"trajectories",
