@@ -13,6 +13,7 @@ import torch.optim as optim
 import tyro
 from stable_baselines3.common.buffers import ReplayBuffer
 from src.utils.mlflow import mlflow_monitoring, MlflowConfig, log_json_artifact
+from src.utils.robot_nav_logging import log_robot_nav_trajectory
 from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
@@ -390,6 +391,8 @@ def main(args: Args):
                         f"trajectories",
                         json_name=f"{global_step:010d}.json",
                     )
+                    if args.env_id.startswith("RobotNavigation"):
+                        log_robot_nav_trajectory(episode_trajectory, global_step)
                     episode_trajectory = []
                     break
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
