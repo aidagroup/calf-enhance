@@ -37,3 +37,17 @@ gym.register(
     kwargs={"config": RobotNavigationConfig(obstacle_count=1)},
     max_episode_steps=300,
 )
+
+gym.register(
+    id="RobotNavigationMoving-v0",
+    entry_point="src.envs:RobotNavigationEnv",
+    kwargs={
+        "config": RobotNavigationConfig(
+            obstacle_count=2,
+            moving_obstacle_count=2,
+            moving_obstacle_radius=0.18,
+            moving_obstacle_speed=0.02,
+        )
+    },
+    max_episode_steps=300,
+)

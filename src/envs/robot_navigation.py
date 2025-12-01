@@ -25,6 +25,12 @@ class RobotNavigationConfig:
     obstacle_radius_shrink_factor: float = 0.85
     obstacle_radius_shrink_steps: int = 5
     obstacle_collision_penalty: float = 5.0
+    moving_obstacle_count: int = 0
+    moving_speed_range: Tuple[float, float] = (0.008, 0.024)
+    moving_direction_change_prob: float = 0.01
+    moving_obstacle_radius: Optional[float] = None
+    moving_obstacle_speed: Optional[float] = None
+    moving_obstacle_x_range: Optional[Tuple[float, float]] = (0.1, 0.9)
 
 
 class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
@@ -54,6 +60,8 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         self.goal_position = np.array([0.0, 0.5], dtype=np.float32)
         self._obstacles = np.zeros((self.config.obstacle_count, 3), dtype=np.float32)
         self._num_obstacles = 0
+        self._moving_indices: list[int] = []
+        self._moving_velocities = np.zeros((0, 2), dtype=np.float32)
 
         self.action_space = spaces.Box(
             low=np.array([0.0, -math.pi], dtype=np.float32),
@@ -112,6 +120,17 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         placed = 0
         attempts_per_obstacle = self.config.obstacle_placement_attempts
 
+        moving_count = min(self.config.moving_obstacle_count, target_obstacles)
+        if moving_count > 0:
+            selection = self._rng.choice(
+                target_obstacles, size=moving_count, replace=False
+            )
+            selection = np.atleast_1d(selection)
+            self._moving_indices = sorted(int(x) for x in selection)
+        else:
+            self._moving_indices = []
+        moving_indices_set = set(self._moving_indices)
+
         radius_low, radius_high = self.config.obstacle_radius_range
         shrink_factor = self.config.obstacle_radius_shrink_factor
         shrink_steps = max(1, self.config.obstacle_radius_shrink_steps)
@@ -119,11 +138,26 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         while placed < target_obstacles:
             success = False
             current_high = radius_high
+            is_moving = placed in moving_indices_set
 
             for _ in range(shrink_steps):
                 for _ in range(attempts_per_obstacle):
-                    radius = float(self._rng.uniform(radius_low, current_high))
-                    x = float(self._rng.uniform(0.1 + radius, 0.45))
+                    if is_moving and self.config.moving_obstacle_radius is not None:
+                        radius = float(self.config.moving_obstacle_radius)
+                    else:
+                        radius = float(self._rng.uniform(radius_low, current_high))
+
+                    if is_moving and self.config.moving_obstacle_x_range is not None:
+                        range_low, range_high = self.config.moving_obstacle_x_range
+                        x_low = max(range_low + radius, radius)
+                        x_high = min(range_high - radius, 1.0 - radius)
+                    else:
+                        x_low = 0.1 + radius
+                        x_high = 0.45
+                    if x_high <= x_low:
+                        x_high = x_low + 1e-3
+
+                    x = float(self._rng.uniform(x_low, x_high))
                     y = float(self._rng.uniform(0.1 + radius, 0.9 - radius))
                     candidate = np.array([x, y, radius], dtype=np.float32)
 
@@ -143,6 +177,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
                 )
 
         self._num_obstacles = self.config.obstacle_count
+        self._initialize_moving_obstacles()
 
         observation = self._get_observation()
         info = {
@@ -157,6 +192,8 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
 
         self._last_action = action
         self._steps += 1
+
+        self._update_moving_obstacles()
 
         speed = float(action[0])
         angle = float(action[1])
@@ -194,6 +231,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             "robot_angle": self.robot_angle,
             "in_obstacle": in_obstacle,
             "goal_reached": terminated,
+            "moving_obstacles": len(self._moving_indices),
         }
 
         if self.render_mode == "human":
@@ -261,6 +299,77 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         obstacle_slice = 5 + 3 * self._num_obstacles
         observation[5:obstacle_slice] = self._obstacles[: self._num_obstacles].reshape(-1)
         return observation
+
+    def _initialize_moving_obstacles(self) -> None:
+        count = len(self._moving_indices)
+        if count <= 0:
+            self._moving_indices = []
+            self._moving_velocities = np.zeros((0, 2), dtype=np.float32)
+            return
+
+        self._moving_velocities = np.zeros((count, 2), dtype=np.float32)
+        for idx in range(count):
+            self._moving_velocities[idx] = self._sample_moving_velocity()
+
+    def _sample_moving_velocity(self) -> np.ndarray:
+        if self.config.moving_obstacle_speed is not None:
+            speed = float(self.config.moving_obstacle_speed)
+        else:
+            speed_low, speed_high = self.config.moving_speed_range
+            speed = float(self._rng.uniform(speed_low, speed_high))
+        angle = float(self._rng.uniform(0.0, 2 * math.pi))
+        direction = np.array([math.cos(angle), math.sin(angle)], dtype=np.float32)
+        return direction * speed
+
+    def _update_moving_obstacles(self) -> None:
+        if not self._moving_indices:
+            return
+
+        for vel_idx, obstacle_idx in enumerate(self._moving_indices):
+            if obstacle_idx >= self._num_obstacles:
+                continue
+
+            radius = self._obstacles[obstacle_idx, 2]
+            if radius <= 0:
+                continue
+
+            if (
+                self.config.moving_direction_change_prob > 0.0
+                and self._rng.random() < self.config.moving_direction_change_prob
+            ):
+                self._moving_velocities[vel_idx] = self._sample_moving_velocity()
+
+            velocity = self._moving_velocities[vel_idx]
+            position = self._obstacles[obstacle_idx, 0:2]
+            new_pos = position + velocity
+
+            if new_pos[0] - radius < 0.0 or new_pos[0] + radius > 1.0:
+                velocity[0] *= -1.0
+                new_pos[0] = np.clip(new_pos[0], radius, 1.0 - radius)
+
+            if new_pos[1] - radius < 0.0 or new_pos[1] + radius > 1.0:
+                velocity[1] *= -1.0
+                new_pos[1] = np.clip(new_pos[1], radius, 1.0 - radius)
+
+            overlap = False
+            for other_idx in range(self._num_obstacles):
+                if other_idx == obstacle_idx:
+                    continue
+                other = self._obstacles[other_idx]
+                other_radius = other[2]
+                if other_radius <= 0:
+                    continue
+                distance = np.linalg.norm(new_pos - other[:2])
+                if distance < radius + other_radius:
+                    overlap = True
+                    break
+
+            if overlap:
+                velocity *= -1.0
+                self._moving_velocities[vel_idx] = velocity
+            else:
+                self._obstacles[obstacle_idx, 0:2] = new_pos
+                self._moving_velocities[vel_idx] = velocity
 
     def _distance_to_goal(self) -> float:
         return float(np.linalg.norm(self.goal_position - self.robot_position))

@@ -59,7 +59,7 @@ def _rollout_episode(
 class Args:
     env_id: str = "RobotNavigation-v0"
     """Environment id to evaluate."""
-    seeds: List[int] = field(default_factory=lambda: [0, 1, 2, 3, 4])
+    seeds: List[int] = field(default_factory=lambda: list(range(20)))
     """List of seeds / initial conditions to roll out."""
     max_steps: int = 300
     """Maximum steps per rollout."""

@@ -56,6 +56,7 @@ bash run/train_td3_5seeds.sh
 - `RobotNavigation-v0`: default configuration with randomly placed obstacles (4 by default).
 - `RobotNavigationSingle-v0`: single-obstacle variant (`obstacle_count=1`).
 - `RobotNavigationEmpty-v0`: obstacle-free variant (`obstacle_count=0`).
+- `RobotNavigationMoving-v0`: two very large, fixed-radius obstacles that move at a constant speed (good for testing dynamic avoidance with predictable motion).
 
 You can point any training/evaluation script to a specific variant by overriding the id, e.g.:
 ```bash
