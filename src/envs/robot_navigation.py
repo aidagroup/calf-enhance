@@ -61,6 +61,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         self._obstacles = np.zeros((self.config.obstacle_count, 3), dtype=np.float32)
         self._num_obstacles = 0
         self._moving_indices: list[int] = []
+        self._moving_index_order: dict[int, int] = {}
         self._moving_velocities = np.zeros((0, 2), dtype=np.float32)
 
         self.action_space = spaces.Box(
@@ -127,8 +128,12 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             )
             selection = np.atleast_1d(selection)
             self._moving_indices = sorted(int(x) for x in selection)
+            self._moving_index_order = {
+                idx: order for order, idx in enumerate(self._moving_indices)
+            }
         else:
             self._moving_indices = []
+            self._moving_index_order = {}
         moving_indices_set = set(self._moving_indices)
 
         radius_low, radius_high = self.config.obstacle_radius_range
@@ -147,10 +152,9 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
                     else:
                         radius = float(self._rng.uniform(radius_low, current_high))
 
-                    if is_moving and self.config.moving_obstacle_x_range is not None:
-                        range_low, range_high = self.config.moving_obstacle_x_range
-                        x_low = max(range_low + radius, radius)
-                        x_high = min(range_high - radius, 1.0 - radius)
+                    if is_moving:
+                        order = self._moving_index_order.get(placed, 0)
+                        x_low, x_high = self._moving_segment_bounds(order, radius)
                     else:
                         x_low = 0.1 + radius
                         x_high = 0.45
@@ -304,12 +308,33 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         count = len(self._moving_indices)
         if count <= 0:
             self._moving_indices = []
+            self._moving_index_order = {}
             self._moving_velocities = np.zeros((0, 2), dtype=np.float32)
             return
 
         self._moving_velocities = np.zeros((count, 2), dtype=np.float32)
         for idx in range(count):
             self._moving_velocities[idx] = self._sample_moving_velocity()
+
+    def _moving_segment_bounds(self, order: int, radius: float) -> Tuple[float, float]:
+        if self.config.moving_obstacle_x_range is None:
+            low, high = 0.1, 0.9
+        else:
+            low, high = self.config.moving_obstacle_x_range
+
+        width = max(high - low, 1e-3)
+        count = max(1, len(self._moving_indices))
+        segment = width / count
+        start = low + segment * order
+        end = min(high, start + segment)
+
+        x_low = start + radius
+        x_high = end - radius
+        if x_high <= x_low:
+            midpoint = (start + end) / 2.0
+            x_low = max(low + radius, midpoint - 1e-3)
+            x_high = min(high - radius, midpoint + 1e-3)
+        return x_low, x_high
 
     def _sample_moving_velocity(self) -> np.ndarray:
         if self.config.moving_obstacle_speed is not None:
