@@ -14,7 +14,7 @@ from gymnasium.utils import seeding
 class RobotNavigationConfig:
     """Configuration values for the robot navigation environment."""
 
-    max_steps: int = 300
+    max_steps: int = 400
     obstacle_count: int = 4
     obstacle_radius_range: Tuple[float, float] = (0.05, 0.12)
     max_speed: float = 0.15
