@@ -31,6 +31,7 @@ class RobotNavigationConfig:
     moving_obstacle_radius: Optional[float] = None
     moving_obstacle_speed: Optional[float] = None
     moving_obstacle_x_range: Optional[Tuple[float, float]] = (0.1, 0.9)
+    heading_penalty_scale: float = 0.2
 
 
 class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
@@ -215,13 +216,15 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         )
 
         distance = self._distance_to_goal()
+        heading_error = abs(self._heading_error())
         terminated = distance <= self.config.success_radius
         truncated = self._steps >= self.config.max_steps
 
         in_obstacle = self._is_in_obstacle(self.robot_position)
 
         # Reward encourages closing the distance, penalizes obstacle incursions, bonus on success
-        reward = -distance
+        angle_penalty = self.config.heading_penalty_scale * (heading_error / math.pi)
+        reward = -distance - angle_penalty
         if in_obstacle:
             reward -= self.config.obstacle_collision_penalty
         if terminated:
@@ -233,6 +236,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             "num_obstacles": self._num_obstacles,
             "last_action": self._last_action.copy(),
             "robot_angle": self.robot_angle,
+            "heading_error": heading_error,
             "in_obstacle": in_obstacle,
             "goal_reached": terminated,
             "moving_obstacles": len(self._moving_indices),
@@ -398,6 +402,19 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
 
     def _distance_to_goal(self) -> float:
         return float(np.linalg.norm(self.goal_position - self.robot_position))
+
+    @staticmethod
+    def _wrap_angle(angle: float) -> float:
+        """Wrap angle to [-pi, pi] for stable orientation error calculations."""
+        return float((angle + math.pi) % (2 * math.pi) - math.pi)
+
+    def _heading_error(self) -> float:
+        """Return signed angle between the robot heading and the goal direction."""
+        delta = self.goal_position - self.robot_position
+        if float(np.dot(delta, delta)) < 1e-12:
+            return 0.0
+        desired_angle = math.atan2(float(delta[1]), float(delta[0]))
+        return self._wrap_angle(desired_angle - self.robot_angle)
 
     def _is_valid_obstacle(self, candidate: np.ndarray, count: int) -> bool:
         padding = self.config.obstacle_padding
