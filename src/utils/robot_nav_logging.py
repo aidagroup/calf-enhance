@@ -21,9 +21,9 @@ def _extract_robot_nav_arrays(episode_trajectory):
 
     obs_array = np.asarray(obs_list)
     positions = obs_array[:, 0:2]
-    goal = obs_array[0, 3:5]
+    goal = obs_array[0, 4:6]
 
-    obstacle_flat = obs_array[0, 5:]
+    obstacle_flat = obs_array[0, 6:]
     if obstacle_flat.size == 0:
         obstacles = np.zeros((0, 3))
     else:

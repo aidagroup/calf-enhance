@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from src.envs.underwaterdrone import TOP_Y, DRONE_MASS, GRAVITY, MAX_F_LONG, MAX_F_LAT
 from src.envs.robot_navigation import RobotNavigationConfig
@@ -67,9 +68,16 @@ class LidarNavController:
 
 
 class RobotNavigationGoalController:
-    def __init__(self, max_speed: float | None = None) -> None:
+    def __init__(
+        self,
+        max_speed: float | None = None,
+        turn_gain: float = 1.0,
+        max_turn_rate: float = math.pi,
+    ) -> None:
         config = RobotNavigationConfig()
         self.max_speed = float(config.max_speed if max_speed is None else max_speed)
+        self.turn_gain = float(turn_gain)
+        self.max_turn_rate = float(max_turn_rate)
 
     def get_action(self, obs):
         obs = np.asarray(obs)
@@ -77,13 +85,19 @@ class RobotNavigationGoalController:
         obs = obs if batched else obs[None, :]
 
         robot = obs[:, 0:2]
-        current_angle = obs[:, 2:3]
-        goal = obs[:, 3:5]
+        heading_cos = obs[:, 2:3]
+        heading_sin = obs[:, 3:4]
+        current_angle = np.arctan2(heading_sin, heading_cos)
+        goal = obs[:, 4:6]
 
         delta = goal - robot
         distance = np.linalg.norm(delta, axis=1, keepdims=True)
         desired_angle = np.arctan2(delta[:, 1], delta[:, 0])[:, None]
         desired_angle = np.where(distance < 1e-8, current_angle, desired_angle)
+
+        angle_error = desired_angle - current_angle
+        angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi
+        angular_velocity = np.clip(self.turn_gain * angle_error, -self.max_turn_rate, self.max_turn_rate)
 
         if self.max_speed <= 0.0:
             speed_ratio = np.zeros_like(distance)
@@ -91,5 +105,5 @@ class RobotNavigationGoalController:
             speed_ratio = np.clip(distance / (self.max_speed * 8.0), 0.0, 1.0)
         speed_ratio = np.where(distance < 1e-8, 0.0, speed_ratio)
 
-        actions = np.hstack([speed_ratio, desired_angle]).astype(np.float32)
+        actions = np.hstack([speed_ratio, angular_velocity]).astype(np.float32)
         return actions if batched else actions[0]

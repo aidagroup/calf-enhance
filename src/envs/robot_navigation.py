@@ -17,7 +17,9 @@ class RobotNavigationConfig:
     max_steps: int = 300
     obstacle_count: int = 4
     obstacle_radius_range: Tuple[float, float] = (0.05, 0.12)
-    max_speed: float = 0.012
+    max_speed: float = 0.15
+    control_dt: float = 0.05
+    max_angular_velocity: float = math.pi
     success_radius: float = 0.05
     window_size: Tuple[int, int] = (800, 600)
     obstacle_padding: float = 0.005
@@ -53,6 +55,8 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             )
         self.render_mode = render_mode
         self.config = config or RobotNavigationConfig()
+        if self.config.control_dt <= 0.0:
+            raise ValueError("RobotNavigationEnv control_dt must be positive.")
 
         self._rng: np.random.Generator
         self._steps = 0
@@ -68,15 +72,19 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         self._moving_velocities = np.zeros((0, 2), dtype=np.float32)
 
         self.action_space = spaces.Box(
-            low=np.array([0.0, -math.pi], dtype=np.float32),
-            high=np.array([1.0, math.pi], dtype=np.float32),
+            low=np.array([0, -self.config.max_angular_velocity], dtype=np.float32),
+            high=np.array(
+                [self.config.max_speed, self.config.max_angular_velocity],
+                dtype=np.float32,
+            ),
             dtype=np.float32,
         )
 
-        obs_low = np.zeros(2 + 1 + 2 + 3 * self.config.obstacle_count, dtype=np.float32)
+        obs_dim = 2 + 2 + 2 + 3 * self.config.obstacle_count
+        obs_low = np.zeros(obs_dim, dtype=np.float32)
         obs_high = np.ones_like(obs_low)
-        obs_low[2] = -math.pi
-        obs_high[2] = math.pi
+        obs_low[2:4] = -1.0
+        obs_high[2:4] = 1.0
         self.observation_space = spaces.Box(
             low=obs_low,
             high=obs_high,
@@ -202,19 +210,24 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
 
         self._update_moving_obstacles()
 
-        speed = float(action[0])
-        angle = float(action[1])
-        if speed > 1e-4:
-            self.robot_angle = angle
+        speed = np.clip(float(action[0]), 0.0, self.config.max_speed)
+        angular_velocity = np.clip(
+            float(action[1]),
+            -self.config.max_angular_velocity,
+            self.config.max_angular_velocity,
+        )
 
         delta = np.array(
             [math.cos(self.robot_angle), math.sin(self.robot_angle)],
             dtype=np.float32,
         )
         self.robot_position = np.clip(
-            self.robot_position + delta * (speed * self.config.max_speed),
+            self.robot_position + delta * (speed * self.config.control_dt),
             0.0,
             1.0,
+        )
+        self.robot_angle = self._wrap_angle(
+            self.robot_angle + angular_velocity * self.config.control_dt
         )
 
         distance = self._distance_to_goal()
@@ -306,10 +319,11 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
     def _get_observation(self) -> np.ndarray:
         observation = np.zeros(self.observation_space.shape, dtype=np.float32)
         observation[0:2] = self.robot_position
-        observation[2] = self.robot_angle
-        observation[3:5] = self.goal_position
-        obstacle_slice = 5 + 3 * self._num_obstacles
-        observation[5:obstacle_slice] = self._obstacles[: self._num_obstacles].reshape(
+        observation[2] = math.cos(self.robot_angle)
+        observation[3] = math.sin(self.robot_angle)
+        observation[4:6] = self.goal_position
+        obstacle_slice = 6 + 3 * self._num_obstacles
+        observation[6:obstacle_slice] = self._obstacles[: self._num_obstacles].reshape(
             -1
         )
         return observation
@@ -411,7 +425,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:
-        """Wrap angle to [-pi, pi] for stable orientation error calculations."""
+        """Wrap angle to [-pi, pi) for stable orientation error calculations."""
         return float((angle + math.pi) % (2 * math.pi) - math.pi)
 
     def _heading_error(self) -> float:
@@ -420,12 +434,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         if float(np.dot(delta, delta)) < 1e-12:
             return 0.0
         desired_angle = math.atan2(float(delta[1]), float(delta[0]))
-        robot_angle = math.atan2(math.sin(self.robot_angle), math.cos(self.robot_angle))
-
-        if np.abs(delta[0]) < 1e-1:
-            print("desired_angle", desired_angle)
-            print("robot_angle", robot_angle)
-        return self._wrap_angle(desired_angle - robot_angle)
+        return self._wrap_angle(desired_angle - self.robot_angle)
 
     def _is_valid_obstacle(self, candidate: np.ndarray, count: int) -> bool:
         padding = self.config.obstacle_padding
@@ -589,26 +598,47 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
 
 
 class SimpleGoalController:
-    """Greedy controller that moves toward the goal with speed-angle commands."""
+    """Greedy controller that moves toward the goal with speed/angular-velocity actions."""
 
-    def __init__(self, *, max_speed: float) -> None:
+    def __init__(
+        self,
+        *,
+        max_speed: float,
+        turn_gain: float = 1.0,
+        max_turn_rate: float = math.pi,
+    ) -> None:
         self.max_speed = float(max_speed)
+        self.turn_gain = float(turn_gain)
+        self.max_turn_rate = float(max_turn_rate)
+
+    @staticmethod
+    def _wrap_angle(angle: float) -> float:
+        return float((angle + math.pi) % (2 * math.pi) - math.pi)
 
     def act(self, observation: np.ndarray) -> np.ndarray:
         robot = observation[0:2]
-        current_angle = float(observation[2])
-        goal = observation[3:5]
+        heading_cos = float(observation[2])
+        heading_sin = float(observation[3])
+        current_angle = math.atan2(heading_sin, heading_cos)
+        goal = observation[4:6]
         delta = goal - robot
 
         distance = np.linalg.norm(delta)
         if distance < 1e-8:
-            return np.array([0.0, current_angle], dtype=np.float32)
+            return np.array([0.0, 0.0], dtype=np.float32)
 
         desired_angle = float(math.atan2(delta[1], delta[0]))
+        angle_error = self._wrap_angle(desired_angle - current_angle)
+        angular_velocity = np.clip(
+            self.turn_gain * angle_error,
+            -self.max_turn_rate,
+            self.max_turn_rate,
+        )
+
         # Saturate speed so the robot slows as it nears the goal
         if self.max_speed <= 0.0:
             speed_ratio = 0.0
         else:
             speed_ratio = min(1.0, distance / (self.max_speed * 8.0))
         speed_ratio = float(np.clip(speed_ratio, 0.0, 1.0))
-        return np.array([speed_ratio, desired_angle], dtype=np.float32)
+        return np.array([speed_ratio, angular_velocity], dtype=np.float32)
