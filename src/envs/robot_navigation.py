@@ -39,7 +39,7 @@ class RobotNavigationConfig:
     target_count: int = 5
     target_radius: float = 0.03
     target_capture_epsilon: float = 0.05
-    target_reward: float = 10.0
+    target_reward: float = 50.0
     target_step_penalty: float = 0.001
     heading_penalty_scale: float = 0.2
 
@@ -307,7 +307,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         heading_error = abs(self._heading_error())
         if self.config.collect_targets:
             goal_reached = distance_to_goal <= self.config.success_radius
-            terminated = goal_reached or self._targets_remaining <= 0
+            terminated = goal_reached
         else:
             goal_reached = distance <= self.config.success_radius
             terminated = goal_reached
@@ -332,8 +332,6 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             )
             reward = -distance - angle_penalty
             reward += capture_reward
-            if goal_reached:
-                reward += 1.0
         else:
             angle_penalty = self.config.heading_penalty_scale * (
                 heading_error / math.pi
