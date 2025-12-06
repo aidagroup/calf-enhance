@@ -372,6 +372,19 @@ def main(args: Args):
                             np.mean(rolling_window["in_obstacle"]),
                             global_step,
                         )
+                        if "targets_captured_total" in info:
+                            captures = float(info.get("targets_captured_total", 0.0))
+                            mlflow.log_metric(
+                                "episode_stats/targets_captured",
+                                captures,
+                                global_step,
+                            )
+                            rolling_window["targets_captured"].append(captures)
+                            mlflow.log_metric(
+                                f"episode_stats/targets_captured_rolling_{args.rolling_average_window}",
+                                np.mean(rolling_window["targets_captured"]),
+                                global_step,
+                            )
 
                     mlflow.log_metric(
                         "episode_stats/n_safe_actions",

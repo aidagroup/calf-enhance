@@ -26,13 +26,21 @@ class RobotNavigationConfig:
     obstacle_placement_attempts: int = 40
     obstacle_radius_shrink_factor: float = 0.85
     obstacle_radius_shrink_steps: int = 5
+    layout_max_retries: int = 5
     obstacle_collision_penalty: float = 5.0
     moving_obstacle_count: int = 0
-    moving_speed_range: Tuple[float, float] = (0.008, 0.024)
+    moving_speed_range: Tuple[float, float] = (0.08, 0.18)
     moving_direction_change_prob: float = 0.01
     moving_obstacle_radius: Optional[float] = None
     moving_obstacle_speed: Optional[float] = None
     moving_obstacle_x_range: Optional[Tuple[float, float]] = (0.1, 0.9)
+    moving_noise_std: float = 0.25
+    collect_targets: bool = False
+    target_count: int = 5
+    target_radius: float = 0.03
+    target_capture_epsilon: float = 0.05
+    target_reward: float = 1.0
+    target_step_penalty: float = 0.001
     heading_penalty_scale: float = 0.2
 
 
@@ -70,9 +78,15 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         self._moving_indices: list[int] = []
         self._moving_index_order: dict[int, int] = {}
         self._moving_velocities = np.zeros((0, 2), dtype=np.float32)
+        self._moving_speed_scales = np.zeros(0, dtype=np.float32)
+        self._targets_remaining = 0
+        self._target_total = 0
 
         self.action_space = spaces.Box(
-            low=np.array([0, -self.config.max_angular_velocity], dtype=np.float32),
+            low=np.array(
+                [-self.config.max_speed, -self.config.max_angular_velocity],
+                dtype=np.float32,
+            ),
             high=np.array(
                 [self.config.max_speed, self.config.max_angular_velocity],
                 dtype=np.float32,
@@ -126,73 +140,128 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         )
         self.robot_angle = math.pi  # start roughly facing the goal
 
-        # Sample random obstacles on the left side without overlaps
-        self._obstacles.fill(0.0)
-        target_obstacles = self.config.obstacle_count
-        placed = 0
-        attempts_per_obstacle = self.config.obstacle_placement_attempts
-
-        moving_count = min(self.config.moving_obstacle_count, target_obstacles)
-        if moving_count > 0:
-            selection = self._rng.choice(
-                target_obstacles, size=moving_count, replace=False
-            )
-            selection = np.atleast_1d(selection)
-            self._moving_indices = sorted(int(x) for x in selection)
-            self._moving_index_order = {
-                idx: order for order, idx in enumerate(self._moving_indices)
-            }
+        layout_success = False
+        if self.config.collect_targets:
+            target_obstacles = max(1, int(self.config.target_count))
         else:
-            self._moving_indices = []
-            self._moving_index_order = {}
-        moving_indices_set = set(self._moving_indices)
+            target_obstacles = self.config.obstacle_count
+        layout_retries = max(1, self.config.layout_max_retries)
 
-        radius_low, radius_high = self.config.obstacle_radius_range
-        shrink_factor = self.config.obstacle_radius_shrink_factor
-        shrink_steps = max(1, self.config.obstacle_radius_shrink_steps)
+        for _ in range(layout_retries):
+            self._obstacles.fill(0.0)
+            placed = 0
+            blocker_placed = target_obstacles == 0
 
-        while placed < target_obstacles:
-            success = False
-            current_high = radius_high
-            is_moving = placed in moving_indices_set
+            if self.config.collect_targets:
+                moving_count = target_obstacles
+            else:
+                moving_count = min(self.config.moving_obstacle_count, target_obstacles)
+            if moving_count > 0:
+                selection = self._rng.choice(
+                    target_obstacles, size=moving_count, replace=False
+                )
+                selection = np.atleast_1d(selection)
+                self._moving_indices = sorted(int(x) for x in selection)
+                self._moving_index_order = {
+                    idx: order for order, idx in enumerate(self._moving_indices)
+                }
+            else:
+                self._moving_indices = []
+                self._moving_index_order = {}
+            moving_indices_set = set(self._moving_indices)
 
-            for _ in range(shrink_steps):
-                for _ in range(attempts_per_obstacle):
-                    if is_moving and self.config.moving_obstacle_radius is not None:
-                        radius = float(self.config.moving_obstacle_radius)
-                    else:
-                        radius = float(self._rng.uniform(radius_low, current_high))
+            radius_low, radius_high = self.config.obstacle_radius_range
+            shrink_factor = self.config.obstacle_radius_shrink_factor
+            shrink_steps = max(1, self.config.obstacle_radius_shrink_steps)
+            attempts_per_obstacle = self.config.obstacle_placement_attempts
 
-                    if is_moving:
-                        order = self._moving_index_order.get(placed, 0)
-                        x_low, x_high = self._moving_segment_bounds(order, radius)
-                    else:
-                        x_low = 0.1 + radius
-                        x_high = 0.45
-                    if x_high <= x_low:
-                        x_high = x_low + 1e-3
+            placement_failed = False
+            while placed < target_obstacles:
+                success = False
+                current_high = radius_high
+                is_moving = placed in moving_indices_set
+                force_blocker = not blocker_placed and not self.config.collect_targets
 
-                    x = float(self._rng.uniform(x_low, x_high))
-                    y = float(self._rng.uniform(0.1 + radius, 0.9 - radius))
-                    candidate = np.array([x, y, radius], dtype=np.float32)
+                for _ in range(shrink_steps):
+                    for _ in range(attempts_per_obstacle):
+                        if self.config.collect_targets:
+                            radius = float(self.config.target_radius)
+                        elif (
+                            is_moving and self.config.moving_obstacle_radius is not None
+                        ):
+                            radius = float(self.config.moving_obstacle_radius)
+                        else:
+                            radius = float(self._rng.uniform(radius_low, current_high))
 
-                    if self._is_valid_obstacle(candidate, placed):
-                        self._obstacles[placed] = candidate
-                        placed += 1
-                        success = True
+                        if force_blocker:
+                            candidate = self._sample_goal_blocker_candidate(radius)
+                            if candidate is None:
+                                continue
+                        elif is_moving:
+                            order = self._moving_index_order.get(placed, 0)
+                            x_low, x_high = self._moving_segment_bounds(order, radius)
+                        elif self.config.collect_targets:
+                            x_low = radius
+                            x_high = 1.0 - radius
+                        else:
+                            x_low = 0.1 + radius
+                            x_high = 0.45
+                        if not force_blocker and x_high <= x_low:
+                            x_high = x_low + 1e-3
+
+                        if not force_blocker:
+                            x = float(self._rng.uniform(x_low, x_high))
+                            if self.config.collect_targets:
+                                y = float(self._rng.uniform(radius, 1.0 - radius))
+                            else:
+                                y = float(self._rng.uniform(0.1 + radius, 0.9 - radius))
+                            candidate = np.array([x, y, radius], dtype=np.float32)
+
+                        if self._is_valid_obstacle(candidate, placed):
+                            self._obstacles[placed] = candidate
+                            placed += 1
+                            success = True
+                            if force_blocker:
+                                blocker_placed = True
+                            break
+
+                    if success:
                         break
+                    current_high = max(radius_low, current_high * shrink_factor)
 
-                if success:
+                if not success:
+                    placement_failed = True
                     break
-                current_high = max(radius_low, current_high * shrink_factor)
 
-            if not success:
+            if placement_failed:
+                continue
+
+            self._num_obstacles = target_obstacles
+            self._initialize_moving_obstacles()
+            self._targets_remaining = int(
+                np.count_nonzero(self._obstacles[: self._num_obstacles, 2] > 0)
+            )
+            self._target_total = (
+                self._targets_remaining if self.config.collect_targets else 0
+            )
+            if not self._ensure_path_blocking_obstacle():
+                placement_failed = True
+
+            if not placement_failed:
+                layout_success = True
+                break
+
+        if not layout_success:
+            if self.config.collect_targets:
+                self._place_targets_uniform(target_obstacles)
+            else:
                 raise RuntimeError(
                     "Failed to place non-overlapping obstacles; consider reducing obstacle_count or padding."
                 )
 
-        self._num_obstacles = self.config.obstacle_count
-        self._initialize_moving_obstacles()
+        if not self.config.collect_targets:
+            self._targets_remaining = 0
+            self._target_total = 0
 
         observation = self._get_observation()
         info = {
@@ -230,32 +299,66 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             self.robot_angle + angular_velocity * self.config.control_dt
         )
 
-        distance = self._distance_to_goal()
+        if self.config.collect_targets:
+            distance = self._distance_to_nearest_target()
+        else:
+            distance = self._distance_to_goal()
+        distance_to_goal = self._distance_to_goal()
         heading_error = abs(self._heading_error())
-        terminated = distance <= self.config.success_radius
+        if self.config.collect_targets:
+            goal_reached = distance_to_goal <= self.config.success_radius
+            terminated = goal_reached or self._targets_remaining <= 0
+        else:
+            goal_reached = distance <= self.config.success_radius
+            terminated = goal_reached
         truncated = self._steps >= self.config.max_steps
 
-        in_obstacle = self._is_in_obstacle(self.robot_position)
+        if self.config.collect_targets:
+            in_obstacle = False
+        else:
+            in_obstacle = self._is_in_obstacle(self.robot_position)
 
-        # Reward encourages closing the distance, penalizes obstacle incursions, bonus on success
-        angle_penalty = self.config.heading_penalty_scale * (heading_error / math.pi)
-        reward = -distance - angle_penalty
-        if in_obstacle:
-            reward -= self.config.obstacle_collision_penalty
-        if terminated:
-            reward += 1.0
+        capture_reward = 0.0
+        captured = 0
+        if self.config.collect_targets:
+            captured = self._handle_target_captures()
+            capture_reward = captured * self.config.target_reward
+            if captured > 0 and self._targets_remaining <= 0:
+                terminated = True
+
+        if self.config.collect_targets:
+            reward = capture_reward - self.config.target_step_penalty
+            if goal_reached:
+                reward += 1.0
+        else:
+            angle_penalty = self.config.heading_penalty_scale * (
+                heading_error / math.pi
+            )
+            reward = -distance - angle_penalty
+            if in_obstacle:
+                reward -= self.config.obstacle_collision_penalty
+            if goal_reached:
+                reward += 1.0
 
         observation = self._get_observation()
         info = {
-            "distance_to_goal": distance,
+            "distance_to_goal": distance_to_goal,
             "num_obstacles": self._num_obstacles,
             "last_action": self._last_action.copy(),
             "robot_angle": self.robot_angle,
             "heading_error": heading_error,
             "in_obstacle": in_obstacle,
-            "goal_reached": terminated,
+            "goal_reached": goal_reached,
             "moving_obstacles": len(self._moving_indices),
         }
+        if self.config.collect_targets:
+            info["distance_to_target"] = distance
+            info["targets_remaining"] = self._targets_remaining
+            info["captures"] = captured if capture_reward > 0 else 0
+            info["targets_total"] = self._target_total
+            info["targets_captured_total"] = max(
+                0, self._target_total - self._targets_remaining
+            )
 
         if self.render_mode == "human":
             self.render()
@@ -334,11 +437,17 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             self._moving_indices = []
             self._moving_index_order = {}
             self._moving_velocities = np.zeros((0, 2), dtype=np.float32)
+            self._moving_speed_scales = np.zeros(0, dtype=np.float32)
             return
 
         self._moving_velocities = np.zeros((count, 2), dtype=np.float32)
+        self._moving_speed_scales = np.zeros(count, dtype=np.float32)
         for idx in range(count):
-            self._moving_velocities[idx] = self._sample_moving_velocity()
+            speed = self._sample_moving_speed()
+            self._moving_speed_scales[idx] = speed
+            angle = float(self._rng.uniform(0.0, 2 * math.pi))
+            direction = np.array([math.cos(angle), math.sin(angle)], dtype=np.float32)
+            self._moving_velocities[idx] = direction * speed
 
     def _moving_segment_bounds(self, order: int, radius: float) -> Tuple[float, float]:
         if self.config.moving_obstacle_x_range is None:
@@ -360,19 +469,169 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             x_high = min(high - radius, midpoint + 1e-3)
         return x_low, x_high
 
-    def _sample_moving_velocity(self) -> np.ndarray:
+    def _reflect_on_bounds(
+        self, position: np.ndarray, velocity: np.ndarray, radius: float
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        clipped = position.copy()
+        for axis in range(2):
+            min_bound = radius
+            max_bound = 1.0 - radius
+            if clipped[axis] < min_bound:
+                clipped[axis] = min_bound
+                velocity[axis] *= -1.0
+            elif clipped[axis] > max_bound:
+                clipped[axis] = max_bound
+                velocity[axis] *= -1.0
+        return clipped, velocity
+
+    def _resolve_static_collisions(
+        self,
+        position: np.ndarray,
+        velocity: np.ndarray,
+        radius: float,
+        obstacle_idx: int,
+        moving_set: set[int],
+    ) -> Tuple[np.ndarray, np.ndarray]:
+        for other_idx in range(self._num_obstacles):
+            if other_idx == obstacle_idx or other_idx in moving_set:
+                continue
+            other = self._obstacles[other_idx]
+            other_radius = other[2]
+            if other_radius <= 0:
+                continue
+            delta = position - other[:2]
+            distance = np.linalg.norm(delta)
+            min_dist = radius + other_radius
+            if distance < min_dist:
+                if distance < 1e-6:
+                    normal = np.array([1.0, 0.0], dtype=np.float32)
+                else:
+                    normal = delta / distance
+                penetration = min_dist - distance + 1e-4
+                position = position + normal * penetration
+                velocity = velocity - 2.0 * np.dot(velocity, normal) * normal
+                position, velocity = self._reflect_on_bounds(position, velocity, radius)
+        return position, velocity
+
+    def _resolve_moving_collisions(self, new_positions: np.ndarray) -> None:
+        count = len(self._moving_indices)
+        if count < 2:
+            return
+        for i in range(count):
+            idx_i = self._moving_indices[i]
+            if idx_i >= self._num_obstacles:
+                continue
+            radius_i = self._obstacles[idx_i, 2]
+            if radius_i <= 0:
+                continue
+            for j in range(i + 1, count):
+                idx_j = self._moving_indices[j]
+                if idx_j >= self._num_obstacles:
+                    continue
+                radius_j = self._obstacles[idx_j, 2]
+                if radius_j <= 0:
+                    continue
+                delta = new_positions[idx_i] - new_positions[idx_j]
+                distance = np.linalg.norm(delta)
+                min_dist = radius_i + radius_j
+                if distance >= min_dist:
+                    continue
+                if distance < 1e-6:
+                    normal = np.array([1.0, 0.0], dtype=np.float32)
+                else:
+                    normal = delta / max(distance, 1e-6)
+                vi = self._moving_velocities[i]
+                vj = self._moving_velocities[j]
+                vi_n = np.dot(vi, normal)
+                vj_n = np.dot(vj, normal)
+                vi = vi - normal * vi_n + normal * vj_n
+                vj = vj - normal * vj_n + normal * vi_n
+                penetration = min_dist - distance + 1e-4
+                correction = normal * (penetration / 2.0)
+                new_positions[idx_i] += correction
+                new_positions[idx_j] -= correction
+                new_positions[idx_i], vi = self._reflect_on_bounds(
+                    new_positions[idx_i], vi, radius_i
+                )
+                new_positions[idx_j], vj = self._reflect_on_bounds(
+                    new_positions[idx_j], vj, radius_j
+                )
+                self._moving_velocities[i] = vi
+                self._moving_velocities[j] = vj
+
+    def _sample_goal_blocker_candidate(self, radius: float) -> Optional[np.ndarray]:
+        segment = self.goal_position - self.robot_position
+        seg_len = float(np.linalg.norm(segment))
+        if seg_len < 1e-6:
+            return None
+        direction = segment / seg_len
+        perpendicular = np.array([-direction[1], direction[0]], dtype=np.float32)
+
+        for _ in range(64):
+            t = float(self._rng.uniform(0.2, 0.8))
+            base = self.robot_position + direction * (seg_len * t)
+            offset = float(self._rng.uniform(-radius * 2.0, radius * 2.0))
+            center = base + perpendicular * offset
+            center = np.clip(center, radius, 1.0 - radius)
+            candidate = np.array([center[0], center[1], radius], dtype=np.float32)
+            return candidate
+        return None
+
+    def _obstacle_blocks_path(self, center: np.ndarray, radius: float) -> bool:
+        start = self.robot_position
+        goal = self.goal_position
+        segment = goal - start
+        seg_len_sq = float(np.dot(segment, segment))
+        if seg_len_sq < 1e-8:
+            return False
+        t = float(np.dot(center - start, segment) / seg_len_sq)
+        if t <= 0.0 or t >= 1.0:
+            return False
+        closest = start + t * segment
+        distance = np.linalg.norm(center - closest)
+        return distance <= radius + self.config.obstacle_padding
+
+    def _has_path_blocking_obstacle(self) -> bool:
+        for obstacle in self._obstacles[: self._num_obstacles]:
+            if obstacle[2] <= 0:
+                continue
+            if self._obstacle_blocks_path(obstacle[:2], obstacle[2]):
+                return True
+        return False
+
+    def _ensure_path_blocking_obstacle(self) -> bool:
+        if (
+            self.config.collect_targets
+            or self._num_obstacles <= 0
+            or self._has_path_blocking_obstacle()
+        ):
+            return True
+        for idx in range(self._num_obstacles):
+            radius = self._obstacles[idx, 2]
+            if radius <= 0:
+                continue
+            candidate = self._sample_goal_blocker_candidate(radius)
+            if candidate is None:
+                continue
+            if self._is_valid_obstacle(
+                candidate, self._num_obstacles, ignore_index=idx
+            ):
+                self._obstacles[idx] = candidate
+                return True
+        return False
+
+    def _sample_moving_speed(self) -> float:
         if self.config.moving_obstacle_speed is not None:
-            speed = float(self.config.moving_obstacle_speed)
-        else:
-            speed_low, speed_high = self.config.moving_speed_range
-            speed = float(self._rng.uniform(speed_low, speed_high))
-        angle = float(self._rng.uniform(0.0, 2 * math.pi))
-        direction = np.array([math.cos(angle), math.sin(angle)], dtype=np.float32)
-        return direction * speed
+            return float(self.config.moving_obstacle_speed)
+        speed_low, speed_high = self.config.moving_speed_range
+        return float(self._rng.uniform(speed_low, speed_high))
 
     def _update_moving_obstacles(self) -> None:
         if not self._moving_indices:
             return
+        dt = self.config.control_dt
+        moving_set = set(self._moving_indices)
+        new_positions = self._obstacles[:, 0:2].copy()
 
         for vel_idx, obstacle_idx in enumerate(self._moving_indices):
             if obstacle_idx >= self._num_obstacles:
@@ -382,46 +641,87 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             if radius <= 0:
                 continue
 
-            if (
-                self.config.moving_direction_change_prob > 0.0
-                and self._rng.random() < self.config.moving_direction_change_prob
-            ):
-                self._moving_velocities[vel_idx] = self._sample_moving_velocity()
+            speed_scale = (
+                self._moving_speed_scales[vel_idx]
+                if vel_idx < len(self._moving_speed_scales)
+                else self._sample_moving_speed()
+            )
 
-            velocity = self._moving_velocities[vel_idx]
-            position = self._obstacles[obstacle_idx, 0:2]
-            new_pos = position + velocity
-
-            if new_pos[0] - radius < 0.0 or new_pos[0] + radius > 1.0:
-                velocity[0] *= -1.0
-                new_pos[0] = np.clip(new_pos[0], radius, 1.0 - radius)
-
-            if new_pos[1] - radius < 0.0 or new_pos[1] + radius > 1.0:
-                velocity[1] *= -1.0
-                new_pos[1] = np.clip(new_pos[1], radius, 1.0 - radius)
-
-            overlap = False
-            for other_idx in range(self._num_obstacles):
-                if other_idx == obstacle_idx:
-                    continue
-                other = self._obstacles[other_idx]
-                other_radius = other[2]
-                if other_radius <= 0:
-                    continue
-                distance = np.linalg.norm(new_pos - other[:2])
-                if distance < radius + other_radius:
-                    overlap = True
-                    break
-
-            if overlap:
-                velocity *= -1.0
-                self._moving_velocities[vel_idx] = velocity
+            if vel_idx < len(self._moving_velocities):
+                velocity = self._moving_velocities[vel_idx]
             else:
-                self._obstacles[obstacle_idx, 0:2] = new_pos
-                self._moving_velocities[vel_idx] = velocity
+                velocity = np.zeros(2, dtype=np.float32)
+
+            if not np.any(velocity):
+                angle = float(self._rng.uniform(0.0, 2 * math.pi))
+                direction = np.array(
+                    [math.cos(angle), math.sin(angle)], dtype=np.float32
+                )
+                velocity = direction * speed_scale
+
+            noise_std = float(self.config.moving_noise_std) * speed_scale
+            if noise_std > 0:
+                noise = self._rng.normal(0.0, noise_std, size=2).astype(np.float32)
+                velocity = velocity + noise
+
+            speed = float(np.linalg.norm(velocity))
+            if speed > speed_scale and speed > 1e-6:
+                velocity = velocity / speed * speed_scale
+            elif speed < 1e-6:
+                angle = float(self._rng.uniform(0.0, 2 * math.pi))
+                direction = np.array(
+                    [math.cos(angle), math.sin(angle)], dtype=np.float32
+                )
+                velocity = direction * speed_scale
+            position = new_positions[obstacle_idx]
+            displacement = velocity * dt
+            candidate_pos = position + displacement
+
+            candidate_pos, velocity = self._reflect_on_bounds(
+                candidate_pos, velocity, radius
+            )
+            candidate_pos, velocity = self._resolve_static_collisions(
+                candidate_pos,
+                velocity,
+                radius,
+                obstacle_idx,
+                moving_set,
+            )
+
+            new_positions[obstacle_idx] = candidate_pos
+            self._moving_velocities[vel_idx] = velocity
+
+        self._resolve_moving_collisions(new_positions)
+
+        for vel_idx, obstacle_idx in enumerate(self._moving_indices):
+            if obstacle_idx >= self._num_obstacles:
+                continue
+            self._obstacles[obstacle_idx, 0:2] = new_positions[obstacle_idx]
 
     def _distance_to_goal(self) -> float:
         return float(np.linalg.norm(self.goal_position - self.robot_position))
+
+    def _nearest_target_vector(self) -> Optional[np.ndarray]:
+        best_vec = None
+        best_dist = float("inf")
+        for obstacle in self._obstacles[: self._num_obstacles]:
+            radius = obstacle[2]
+            if radius <= 0:
+                continue
+            vec = obstacle[:2] - self.robot_position
+            dist = np.linalg.norm(vec)
+            if dist < best_dist:
+                best_dist = dist
+                best_vec = vec
+        return best_vec
+
+    def _distance_to_nearest_target(self) -> float:
+        if not self.config.collect_targets:
+            return self._distance_to_goal()
+        vec = self._nearest_target_vector()
+        if vec is None:
+            return 0.0
+        return float(np.linalg.norm(vec))
 
     @staticmethod
     def _wrap_angle(angle: float) -> float:
@@ -430,19 +730,42 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
 
     def _heading_error(self) -> float:
         """Return signed angle between the robot heading and the goal direction."""
-        delta = self.goal_position - self.robot_position
-        if float(np.dot(delta, delta)) < 1e-12:
-            return 0.0
-        desired_angle = math.atan2(float(delta[1]), float(delta[0]))
+        if self.config.collect_targets:
+            vec = self._nearest_target_vector()
+            if vec is None or float(np.dot(vec, vec)) < 1e-12:
+                return 0.0
+            desired_angle = math.atan2(float(vec[1]), float(vec[0]))
+        else:
+            delta = self.goal_position - self.robot_position
+            if float(np.dot(delta, delta)) < 1e-12:
+                return 0.0
+            desired_angle = math.atan2(float(delta[1]), float(delta[0]))
         return self._wrap_angle(desired_angle - self.robot_angle)
 
-    def _is_valid_obstacle(self, candidate: np.ndarray, count: int) -> bool:
+    def _is_valid_obstacle(
+        self,
+        candidate: np.ndarray,
+        count: int,
+        *,
+        ignore_index: Optional[int] = None,
+    ) -> bool:
         padding = self.config.obstacle_padding
-        for other in self._obstacles[:count]:
+        center = candidate[:2]
+        radius = float(candidate[2])
+
+        if np.any(center - radius < 0.0) or np.any(center + radius > 1.0):
+            return False
+
+        if np.linalg.norm(center - self.robot_position) < radius + padding:
+            return False
+
+        for idx, other in enumerate(self._obstacles[:count]):
+            if idx == ignore_index:
+                continue
             if not other.any():
                 continue
-            distance = np.linalg.norm(candidate[:2] - other[:2])
-            if distance < candidate[2] + other[2] + padding:
+            distance = np.linalg.norm(center - other[:2])
+            if distance < radius + other[2] + padding:
                 return False
         return True
 
@@ -455,6 +778,40 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             if np.linalg.norm(position - center) <= radius:
                 return True
         return False
+
+    def _handle_target_captures(self) -> int:
+        if not self.config.collect_targets or self._num_obstacles <= 0:
+            return 0
+        captured = 0
+        eps = float(self.config.target_capture_epsilon)
+        for idx in range(self._num_obstacles):
+            radius = self._obstacles[idx, 2]
+            if radius <= 0:
+                continue
+            center = self._obstacles[idx, 0:2]
+            threshold = max(radius, eps)
+            if np.linalg.norm(self.robot_position - center) <= threshold:
+                self._obstacles[idx, 2] = 0.0
+                self._obstacles[idx, 0:2] = center
+                captured += 1
+                order = self._moving_index_order.get(idx)
+                if order is not None and order < len(self._moving_velocities):
+                    self._moving_velocities[order] = 0.0
+        if captured > 0:
+            self._targets_remaining = max(0, self._targets_remaining - captured)
+        return captured
+
+    def _place_targets_uniform(self, count: int) -> None:
+        radius = float(self.config.target_radius)
+        centers = self._rng.uniform(radius, 1.0 - radius, size=(count, 2))
+        self._obstacles[:count, 0:2] = centers
+        self._obstacles[:count, 2] = radius
+        self._num_obstacles = count
+        self._moving_indices = list(range(count))
+        self._moving_index_order = {idx: idx for idx in range(count)}
+        self._initialize_moving_obstacles()
+        self._targets_remaining = count
+        self._target_total = count
 
     def _ensure_pygame(self) -> None:
         if self.render_mode is None:

@@ -3,6 +3,8 @@ import gymnasium as gym
 
 from src.envs.robot_navigation import RobotNavigationConfig
 
+_DEFAULT_ROBOT_NAV_MAX_SPEED = RobotNavigationConfig().max_speed
+
 REPO_PATH = Path(__file__).parent.parent
 SRC_PATH = REPO_PATH / "src"
 RUN_PATH = REPO_PATH / "run"
@@ -46,8 +48,26 @@ gym.register(
             obstacle_count=2,
             moving_obstacle_count=2,
             moving_obstacle_radius=0.18,
-            moving_obstacle_speed=0.02,
+            moving_obstacle_speed=_DEFAULT_ROBOT_NAV_MAX_SPEED,
         )
     },
     max_episode_steps=300,
+)
+
+gym.register(
+    id="RobotNavigationCatch-v0",
+    entry_point="src.envs:RobotNavigationEnv",
+    kwargs={
+        "config": RobotNavigationConfig(
+            obstacle_count=5,
+            moving_obstacle_count=5,
+            collect_targets=True,
+            target_radius=0.025,
+            target_reward=2.0,
+            target_step_penalty=0.001,
+            moving_obstacle_radius=0.025,
+            moving_obstacle_speed=0.12,
+        )
+    },
+    max_episode_steps=400,
 )
