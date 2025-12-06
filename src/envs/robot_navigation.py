@@ -48,7 +48,9 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
     ) -> None:
         super().__init__()
         if render_mode not in (None, "human", "rgb_array"):
-            raise ValueError(f"Unsupported render_mode '{render_mode}'. Use None, 'human', or 'rgb_array'.")
+            raise ValueError(
+                f"Unsupported render_mode '{render_mode}'. Use None, 'human', or 'rgb_array'."
+            )
         self.render_mode = render_mode
         self.config = config or RobotNavigationConfig()
 
@@ -249,7 +251,9 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
 
     def render(self):
         if self.render_mode not in ("human", "rgb_array"):
-            raise RuntimeError("Render mode must be 'human' or 'rgb_array' to draw the simulation.")
+            raise RuntimeError(
+                "Render mode must be 'human' or 'rgb_array' to draw the simulation."
+            )
 
         self._ensure_pygame()
         pygame = self._pygame
@@ -305,7 +309,9 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         observation[2] = self.robot_angle
         observation[3:5] = self.goal_position
         obstacle_slice = 5 + 3 * self._num_obstacles
-        observation[5:obstacle_slice] = self._obstacles[: self._num_obstacles].reshape(-1)
+        observation[5:obstacle_slice] = self._obstacles[: self._num_obstacles].reshape(
+            -1
+        )
         return observation
 
     def _initialize_moving_obstacles(self) -> None:
@@ -414,6 +420,8 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         if float(np.dot(delta, delta)) < 1e-12:
             return 0.0
         desired_angle = math.atan2(float(delta[1]), float(delta[0]))
+        if np.abs(delta[0]) < 1e-1:
+            print("desired_angle", desired_angle)
         return self._wrap_angle(desired_angle - self.robot_angle)
 
     def _is_valid_obstacle(self, candidate: np.ndarray, count: int) -> bool:
@@ -463,7 +471,9 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         pygame = self._pygame
         width, height = self.config.window_size
         border_color = (50, 50, 50)
-        pygame.draw.rect(self._surface, border_color, pygame.Rect(0, 0, width, height), width=4)
+        pygame.draw.rect(
+            self._surface, border_color, pygame.Rect(0, 0, width, height), width=4
+        )
 
     def _draw_goal(self) -> None:
         pygame = self._pygame
@@ -495,24 +505,37 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         body_radius = max(6, int(0.045 * scale))
 
         speed_ratio = float(np.clip(self._last_action[0], 0.0, 1.0))
-        pulse_radius = body_radius + int(2 + 3 * math.sin(self._steps * 0.3 + speed_ratio * math.pi))
+        pulse_radius = body_radius + int(
+            2 + 3 * math.sin(self._steps * 0.3 + speed_ratio * math.pi)
+        )
         pulse_radius = max(pulse_radius, body_radius + 1)
 
         # Draw shimmering aura
-        pygame.draw.circle(self._surface, (180, 200, 255), center, pulse_radius, width=2)
+        pygame.draw.circle(
+            self._surface, (180, 200, 255), center, pulse_radius, width=2
+        )
 
         # Base body
         pygame.draw.circle(self._surface, (60, 120, 240), center, body_radius)
         pygame.draw.circle(self._surface, (20, 60, 160), center, body_radius, width=2)
-        highlight = (center[0] + int(body_radius * 0.4), center[1] - int(body_radius * 0.4))
-        pygame.draw.circle(self._surface, (220, 240, 255), highlight, max(1, body_radius // 3))
+        highlight = (
+            center[0] + int(body_radius * 0.4),
+            center[1] - int(body_radius * 0.4),
+        )
+        pygame.draw.circle(
+            self._surface, (220, 240, 255), highlight, max(1, body_radius // 3)
+        )
 
         heading_world = np.array(
             [math.cos(self.robot_angle), math.sin(self.robot_angle)],
             dtype=np.float32,
         )
-        heading_screen = np.array([heading_world[0], -heading_world[1]], dtype=np.float32)
-        perp_screen = np.array([-heading_screen[1], heading_screen[0]], dtype=np.float32)
+        heading_screen = np.array(
+            [heading_world[0], -heading_world[1]], dtype=np.float32
+        )
+        perp_screen = np.array(
+            [-heading_screen[1], heading_screen[0]], dtype=np.float32
+        )
 
         nose_offset = heading_screen * body_radius * 1.3
         tail_offset = heading_screen * body_radius * 0.7
@@ -531,11 +554,17 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             int(center[1] - tail_offset[1] - wing_offset[1]),
         )
 
-        pygame.draw.polygon(self._surface, (250, 250, 255), [nose, left_wing, right_wing])
-        pygame.draw.polygon(self._surface, (40, 80, 200), [nose, left_wing, right_wing], width=1)
+        pygame.draw.polygon(
+            self._surface, (250, 250, 255), [nose, left_wing, right_wing]
+        )
+        pygame.draw.polygon(
+            self._surface, (40, 80, 200), [nose, left_wing, right_wing], width=1
+        )
 
         # Thruster animation
-        thruster_wave = 0.7 + 0.3 * (math.sin(self._steps * 0.5 + speed_ratio * 2.0) + 1) / 2
+        thruster_wave = (
+            0.7 + 0.3 * (math.sin(self._steps * 0.5 + speed_ratio * 2.0) + 1) / 2
+        )
         thruster_length = body_radius * (0.4 + 0.6 * speed_ratio) * thruster_wave
         thruster_vec = -heading_screen * thruster_length
         thruster_base = (
@@ -551,7 +580,9 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             int(160 + 70 * speed_ratio),
             int(80 + 100 * speed_ratio),
         )
-        pygame.draw.line(self._surface, flame_color, thruster_base, thruster_end, width=3)
+        pygame.draw.line(
+            self._surface, flame_color, thruster_base, thruster_end, width=3
+        )
 
 
 class SimpleGoalController:
