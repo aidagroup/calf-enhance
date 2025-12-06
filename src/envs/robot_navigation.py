@@ -422,6 +422,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         desired_angle = math.atan2(float(delta[1]), float(delta[0]))
         if np.abs(delta[0]) < 1e-1:
             print("desired_angle", desired_angle)
+            print("robot_angle", self.robot_angle)
         return self._wrap_angle(desired_angle - self.robot_angle)
 
     def _is_valid_obstacle(self, candidate: np.ndarray, count: int) -> bool:
