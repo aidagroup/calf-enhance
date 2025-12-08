@@ -71,13 +71,15 @@ class RobotNavigationGoalController:
     def __init__(
         self,
         max_speed: float | None = None,
-        turn_gain: float = 1.0,
-        max_turn_rate: float = math.pi,
+        turn_gain: float = 0.35,
+        max_turn_rate: float = math.pi / 2.0,
+        speed_scale: float = 0.6,
     ) -> None:
         config = RobotNavigationConfig()
         self.max_speed = float(config.max_speed if max_speed is None else max_speed)
         self.turn_gain = float(turn_gain)
         self.max_turn_rate = float(max_turn_rate)
+        self.speed_scale = float(np.clip(speed_scale, 0.0, 1.0))
 
     def get_action(self, obs):
         obs = np.asarray(obs)
@@ -104,6 +106,7 @@ class RobotNavigationGoalController:
         else:
             speed_ratio = np.clip(distance / (self.max_speed * 8.0), 0.0, 1.0)
         speed_ratio = np.where(distance < 1e-8, 0.0, speed_ratio)
+        speed_ratio *= self.speed_scale
 
         actions = np.hstack([speed_ratio, angular_velocity]).astype(np.float32)
         return actions if batched else actions[0]
