@@ -42,14 +42,15 @@ class UnderwaterDroneNominalController:
 
 
 class LidarNavController:
-    def __init__(self, kp_angle = 2.0):
+    def __init__(self, kp_angle=2.0):
         from src.envs.lidarnav import LidarNavEnv
+
         env = LidarNavEnv()
         self.goal_pos = env.goal_pos
         self.max_velocity = env.max_velocity
-        self.max_angular_velocity = env.max_angular_velocity 
+        self.max_angular_velocity = env.max_angular_velocity
         self.kp_angle = kp_angle
-        
+
     def get_action(self, obs):
         robot_pos = obs.reshape(-1)[:2]
         to_goal = self.goal_pos - robot_pos
@@ -58,7 +59,7 @@ class LidarNavController:
         angle_error = (angle_to_goal - robot_angle) % (2 * np.pi)
         if angle_error > np.pi:
             angle_error -= 2 * np.pi
-        
+
         # Simple P controller for angular velocity
         omega = self.kp_angle * angle_error
         omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
@@ -72,8 +73,8 @@ class RobotNavigationGoalController:
         self,
         max_speed: float | None = None,
         turn_gain: float = 0.35,
-        max_turn_rate: float = math.pi / 2.0,
-        speed_scale: float = 0.6,
+        max_turn_rate: float = math.pi / 4.0,
+        speed_scale: float = 0.2,
     ) -> None:
         config = RobotNavigationConfig()
         self.max_speed = float(config.max_speed if max_speed is None else max_speed)
@@ -99,7 +100,9 @@ class RobotNavigationGoalController:
 
         angle_error = desired_angle - current_angle
         angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi
-        angular_velocity = np.clip(self.turn_gain * angle_error, -self.max_turn_rate, self.max_turn_rate)
+        angular_velocity = np.clip(
+            self.turn_gain * angle_error, -self.max_turn_rate, self.max_turn_rate
+        )
 
         if self.max_speed <= 0.0:
             speed_ratio = np.zeros_like(distance)
