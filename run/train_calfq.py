@@ -82,6 +82,7 @@ class Args:
     """if toggled, the p_relax and p_relax_decay parameters will be annealed"""
     calfq_anneal_frac: float = 0.9
     """the fraction of the total timesteps to anneal the p_relax and p_relax_decay parameters"""
+    calfq_selective_buffer: bool = False
 
     def __post_init__(self):
         self.mlflow.experiment_name = (
@@ -467,7 +468,7 @@ def main(args: Args):
                     global_step,
                 )
 
-        if np.any(~safe_actions_mask):
+        if np.any(~safe_actions_mask) or not args.calfq_selective_buffer:
             rb.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
         # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
