@@ -82,7 +82,7 @@ class Args:
     """if toggled, the p_relax and p_relax_decay parameters will be annealed"""
     calfq_anneal_frac: float = 0.9
     """the fraction of the total timesteps to anneal the p_relax and p_relax_decay parameters"""
-    calfq_selective_buffer: bool = False
+    calfq_selective_buffer: bool = True
 
     def __post_init__(self):
         self.mlflow.experiment_name = (
