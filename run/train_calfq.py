@@ -18,7 +18,10 @@ from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
 from collections import defaultdict, deque
-from src.controller import UnderwaterDroneNominalController, RobotNavigationGoalController
+from src.controller import (
+    UnderwaterDroneNominalController,
+    RobotNavigationGoalController,
+)
 
 
 @dataclass
@@ -33,7 +36,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
+    device: str = "cuda:0"
     """if toggled, cuda will be enabled by default"""
     capture_video: bool = False
     """whether to capture videos of the agent performances (check out `videos` folder)"""
@@ -170,7 +173,7 @@ def main(args: Args):
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device(args.device)
     # env setup
     envs = gym.vector.SyncVectorEnv(
         [
@@ -339,7 +342,9 @@ def main(args: Args):
                             info["avoidance_score"],
                             global_step,
                         )
-                        rolling_window["avoidance_score"].append(info["avoidance_score"])
+                        rolling_window["avoidance_score"].append(
+                            info["avoidance_score"]
+                        )
                         mlflow.log_metric(
                             f"episode_stats/avoidance_score_rolling_{args.rolling_average_window}",
                             np.mean(rolling_window["avoidance_score"]),
