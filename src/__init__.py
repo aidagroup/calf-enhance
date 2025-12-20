@@ -61,6 +61,7 @@ gym.register(
         "config": RobotNavigationConfig(
             max_steps=1000,
             obstacle_count=7,
+            target_count=7,
             moving_obstacle_count=7,
             collect_targets=True,
             target_radius=0.05,
