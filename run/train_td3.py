@@ -18,13 +18,14 @@ from src import RUN_PATH
 import stable_baselines3 as sb3
 import mlflow
 from collections import defaultdict, deque
+from src.config import config
 
 
 @dataclass
 class Args:
     mlflow: MlflowConfig = field(
         default_factory=lambda: MlflowConfig(
-            tracking_uri=f"file://{RUN_PATH}/mlruns",
+            tracking_uri=config.MLFLOW_TRACKING_URI,
             experiment_name=os.path.basename(__file__)[: -len(".py")],
         )
     )
@@ -32,7 +33,7 @@ class Args:
     """seed of the experiment"""
     torch_deterministic: bool = True
     """if toggled, `torch.backends.cudnn.deterministic=False`"""
-    cuda: bool = True
+    device: str = "cuda:0"
     """if toggled, cuda will be enabled by default"""
     track: bool = False
     """if toggled, this experiment will be tracked with Weights and Biases"""
@@ -168,7 +169,7 @@ def main(args: Args):
     torch.backends.cudnn.deterministic = args.torch_deterministic
     mlflow.set_tag("videos_path", f"{RUN_PATH}/videos/{args.mlflow.run_name}")
 
-    device = torch.device("cuda" if torch.cuda.is_available() and args.cuda else "cpu")
+    device = torch.device(args.device)
 
     # env setup
     envs = gym.vector.SyncVectorEnv(
@@ -280,7 +281,9 @@ def main(args: Args):
                             info["avoidance_score"],
                             global_step,
                         )
-                        rolling_window["avoidance_score"].append(info["avoidance_score"])
+                        rolling_window["avoidance_score"].append(
+                            info["avoidance_score"]
+                        )
                         mlflow.log_metric(
                             f"episode_stats/avoidance_score_rolling_{args.rolling_average_window}",
                             np.mean(rolling_window["avoidance_score"]),

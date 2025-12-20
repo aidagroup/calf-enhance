@@ -22,13 +22,14 @@ from src.controller import (
     UnderwaterDroneNominalController,
     RobotNavigationGoalController,
 )
+from src.config import config
 
 
 @dataclass
 class Args:
     mlflow: MlflowConfig = field(
         default_factory=lambda: MlflowConfig(
-            tracking_uri=f"file://{RUN_PATH}/mlruns",
+            tracking_uri=config.MLFLOW_TRACKING_URI,
             experiment_name=os.path.basename(__file__)[: -len(".py")],
         )
     )

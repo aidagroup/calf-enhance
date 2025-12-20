@@ -21,6 +21,7 @@ from loguru import logger
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import json
+from src.config import config
 
 
 @dataclass
@@ -102,6 +103,13 @@ def mlflow_monitoring():
     def inner1(func):
         def inner2(*args, **kwargs):
             mlflow_config: MlflowConfig = args[0].mlflow
+            os.environ.setdefault("AWS_ACCESS_KEY_ID", config.AWS_ACCESS_KEY_ID)
+            os.environ.setdefault("AWS_SECRET_ACCESS_KEY", config.AWS_SECRET_ACCESS_KEY)
+            os.environ.setdefault("AWS_DEFAULT_REGION", config.AWS_DEFAULT_REGION)
+            os.environ.setdefault(
+                "MLFLOW_S3_ENDPOINT_URL", config.MLFLOW_S3_ENDPOINT_URL
+            )
+
             mlflow.set_tracking_uri(mlflow_config.tracking_uri)
             repo = git.Repo(REPO_PATH)
 
