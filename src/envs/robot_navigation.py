@@ -38,7 +38,7 @@ class RobotNavigationConfig:
     collect_targets: bool = False
     target_count: int = 10
     target_radius: float = 0.03
-    target_capture_epsilon: float = 0.05
+    target_capture_epsilon: float = 0.08
     target_reward: float = -20.0
     target_step_penalty: float = 0.001
     heading_penalty_scale: float = 0.2

@@ -52,6 +52,7 @@ def _rollout_episode(
         "distance_to_goal": distance_to_goal,
         "steps": len(episode_trajectory),
         "seed": seed,
+        "targets_captured_total": final_info.get("targets_captured_total", 0),
     }
 
 
@@ -59,7 +60,7 @@ def _rollout_episode(
 class Args:
     env_id: str = "RobotNavigation-v0"
     """Environment id to evaluate."""
-    seeds: List[int] = field(default_factory=lambda: list(range(20)))
+    seeds: List[int] = field(default_factory=lambda: list(range(200)))
     """List of seeds / initial conditions to roll out."""
     max_steps: int = 300
     """Maximum steps per rollout."""
@@ -76,6 +77,8 @@ class Args:
 def main(args: Args):
     controller = RobotNavigationGoalController()
     results = []
+    rewards = []
+    targets_captured = []
 
     mlflow_run = None
     if args.log_mlflow:
@@ -96,13 +99,16 @@ def main(args: Args):
                 controller=controller,
             )
             results.append(rollout)
-
+            rewards.append(rollout["total_reward"])
+            targets_captured.append(rollout["targets_captured_total"])
             print(
                 f"Seed {seed}: return={rollout['total_reward']:.3f}, "
                 f"steps={rollout['steps']}, goal_reached={rollout['goal_reached']}, "
-                f"distance_to_goal={rollout['distance_to_goal']:.3f}"
+                f"distance_to_goal={rollout['distance_to_goal']:.3f}, "
+                f"targets_captured={rollout['targets_captured_total']}"
             )
-
+            print(f"Avg reward: {np.mean(rewards)}")
+            print(f"Avg targets captured: {np.mean(targets_captured)}")
             if args.log_mlflow and mlflow_run is not None:
                 mlflow.log_metric("return", rollout["total_reward"], step=idx)
                 mlflow.log_metric(

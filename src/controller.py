@@ -42,14 +42,15 @@ class UnderwaterDroneNominalController:
 
 
 class LidarNavController:
-    def __init__(self, kp_angle = 2.0):
+    def __init__(self, kp_angle=2.0):
         from src.envs.lidarnav import LidarNavEnv
+
         env = LidarNavEnv()
         self.goal_pos = env.goal_pos
         self.max_velocity = env.max_velocity
-        self.max_angular_velocity = env.max_angular_velocity 
+        self.max_angular_velocity = env.max_angular_velocity
         self.kp_angle = kp_angle
-        
+
     def get_action(self, obs):
         robot_pos = obs.reshape(-1)[:2]
         to_goal = self.goal_pos - robot_pos
@@ -58,7 +59,7 @@ class LidarNavController:
         angle_error = (angle_to_goal - robot_angle) % (2 * np.pi)
         if angle_error > np.pi:
             angle_error -= 2 * np.pi
-        
+
         # Simple P controller for angular velocity
         omega = self.kp_angle * angle_error
         omega = np.clip(omega, -self.max_angular_velocity, self.max_angular_velocity)
@@ -73,11 +74,17 @@ class RobotNavigationGoalController:
         max_speed: float | None = None,
         turn_gain: float = 1.0,
         max_turn_rate: float = math.pi,
+        cruise_speed: float = 0.1,
     ) -> None:
         config = RobotNavigationConfig()
         self.max_speed = float(config.max_speed if max_speed is None else max_speed)
         self.turn_gain = float(turn_gain)
         self.max_turn_rate = float(max_turn_rate)
+        if cruise_speed is None:
+            self.cruise_speed = self.max_speed
+        else:
+            self.cruise_speed = float(cruise_speed)
+        self.cruise_speed = max(0.0, min(self.cruise_speed, self.max_speed))
 
     def get_action(self, obs):
         obs = np.asarray(obs)
@@ -97,13 +104,16 @@ class RobotNavigationGoalController:
 
         angle_error = desired_angle - current_angle
         angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi
-        angular_velocity = np.clip(self.turn_gain * angle_error, -self.max_turn_rate, self.max_turn_rate)
+        angular_velocity = np.clip(
+            self.turn_gain * angle_error, -self.max_turn_rate, self.max_turn_rate
+        )
 
-        if self.max_speed <= 0.0:
-            speed_ratio = np.zeros_like(distance)
+        if self.max_speed <= 0.0 or self.cruise_speed <= 0.0:
+            speed = np.zeros_like(distance)
         else:
-            speed_ratio = np.clip(distance / (self.max_speed * 8.0), 0.0, 1.0)
-        speed_ratio = np.where(distance < 1e-8, 0.0, speed_ratio)
+            speed = np.clip(distance / (self.max_speed * 8.0), 0.0, 1.0)
+            speed = np.minimum(speed, self.cruise_speed)
+        speed = np.where(distance < 1e-8, 0.0, speed)
 
-        actions = np.hstack([speed_ratio, angular_velocity]).astype(np.float32)
+        actions = np.hstack([speed, angular_velocity]).astype(np.float32)
         return actions if batched else actions[0]
