@@ -28,7 +28,7 @@ class RobotNavigationConfig:
     obstacle_radius_shrink_steps: int = 5
     layout_max_retries: int = 5
     obstacle_collision_penalty: float = 5.0
-    moving_obstacle_count: int = 0
+    moving_obstacle_count: int = 10
     moving_speed_range: Tuple[float, float] = (0.08, 0.18)
     moving_direction_change_prob: float = 0.01
     moving_obstacle_radius: Optional[float] = None
@@ -36,10 +36,10 @@ class RobotNavigationConfig:
     moving_obstacle_x_range: Optional[Tuple[float, float]] = (0.1, 0.9)
     moving_noise_std: float = 0.25
     collect_targets: bool = False
-    target_count: int = 5
+    target_count: int = 10
     target_radius: float = 0.03
     target_capture_epsilon: float = 0.05
-    target_reward: float = 10.0
+    target_reward: float = -20.0
     target_step_penalty: float = 0.001
     heading_penalty_scale: float = 0.2
 
