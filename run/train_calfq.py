@@ -550,39 +550,6 @@ def main(args: Args):
                     global_step,
                 )
 
-    # if args.save_model:
-    #     model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"
-    #     torch.save((actor.state_dict(), qf1.state_dict(), qf2.state_dict()), model_path)
-    #     print(f"model saved to {model_path}")
-    #     from cleanrl_utils.evals.td3_eval import evaluate
-
-    #     episodic_returns = evaluate(
-    #         model_path,
-    #         make_env,
-    #         args.env_id,
-    #         eval_episodes=10,
-    #         run_name=f"{run_name}-eval",
-    #         Model=(Actor, QNetwork),
-    #         device=device,
-    #         exploration_noise=args.exploration_noise,
-    #     )
-    #     for idx, episodic_return in enumerate(episodic_returns):
-    #         mlflow.log_metric("eval/episodic_return", episodic_return, idx)
-
-    #     if args.upload_model:
-    #         from cleanrl_utils.huggingface import push_to_hub
-
-    #         repo_name = f"{args.env_id}-{args.exp_name}-seed{args.seed}"
-    #         repo_id = f"{args.hf_entity}/{repo_name}" if args.hf_entity else repo_name
-    #         push_to_hub(
-    #             args,
-    #             episodic_returns,
-    #             repo_id,
-    #             "TD3",
-    #             f"runs/{run_name}",
-    #             f"videos/{run_name}-eval",
-    #         )
-
     envs.close()
 
 
