@@ -38,7 +38,6 @@ services:
     build:
       context: .
       dockerfile: mlflow.Dockerfile
-    image: ghcr.io/mlflow/mlflow:v2.21.3
     container_name: mlflow
     depends_on:
       - postgres
