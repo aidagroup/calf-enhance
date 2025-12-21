@@ -9,3 +9,5 @@ wheels/
 # Virtual environments
 .venv
 videos/
+.dockerdata/pgdata
+.dockerdata/minio-data

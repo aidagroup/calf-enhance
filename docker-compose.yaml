@@ -7,7 +7,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: mlflow
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./.dockerdata/pgdata:/var/lib/postgresql/data
 
   minio:
     image: minio/minio
@@ -17,10 +17,10 @@ services:
       MINIO_ROOT_USER: ${AWS_ACCESS_KEY_ID}
       MINIO_ROOT_PASSWORD: ${AWS_SECRET_ACCESS_KEY}
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "${MINIO_PORT}:9000"
+      - "${MINIO_CONSOLE_PORT}:9001"
     volumes:
-      - minio-data:/data
+      - ./.dockerdata/minio-data:/data
 
   minio-init:
     image: minio/mc
@@ -44,7 +44,7 @@ services:
       - postgres
       - minio
     ports:
-      - "5000:5000"
+      - "${MLFLOW_PORT}:5000"
     environment:
       AWS_ACCESS_KEY_ID: ${AWS_ACCESS_KEY_ID}
       AWS_SECRET_ACCESS_KEY: ${AWS_SECRET_ACCESS_KEY}
@@ -55,7 +55,3 @@ services:
       --backend-store-uri postgresql://mlflow:${POSTGRES_PASSWORD}@postgres:5432/mlflow
       --default-artifact-root s3://mlflow
       --host 0.0.0.0
-
-volumes:
-  pgdata:
-  minio-data:
