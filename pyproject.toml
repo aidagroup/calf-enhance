@@ -8,7 +8,7 @@ dependencies = [
     "black[jupyter]>=25.1.0",
     "boto3>=1.42.14",
     "gitpython>=3.1.44",
-    # "gymnasium>=1.2.1",
+    "gymnasium[mujoco]==0.28.1",
     "ipykernel>=6.29.5",
     "loguru>=0.7.3",
     "matplotlib>=3.10.1",
