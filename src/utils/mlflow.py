@@ -133,7 +133,9 @@ def mlflow_monitoring():
 
             with mlflow.start_run(run_name=mlflow_config.run_name):
                 run_id = mlflow.active_run().info.run_id
-                init_artifact_uploader(run_id)
+                init_artifact_uploader(
+                    run_id, poll_interval=config.ARTIFACT_UPLOAD_POLL_INTERVAL
+                )
 
                 if len(args):
                     args_dict = vars(args[0])

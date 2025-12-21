@@ -6,6 +6,8 @@ from pathlib import Path
 from loguru import logger
 from mlflow.tracking import MlflowClient
 
+from src.config import config
+
 
 class ArtifactUploader:
     """Background worker that batches and uploads artifacts to MLflow."""
@@ -105,7 +107,7 @@ _uploader: ArtifactUploader | None = None
 
 def init_artifact_uploader(
     run_id: str,
-    base_staging_dir: Path = Path("logs/artifact_staging"),
+    base_staging_dir: Path = config.LOG_ARTIFACT_DIR,
     poll_interval: float = 30.0,
 ):
     global _uploader

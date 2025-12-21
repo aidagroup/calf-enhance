@@ -21,14 +21,23 @@ class Config(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str
     AWS_DEFAULT_REGION: str
 
+    ARTIFACT_UPLOAD_POLL_INTERVAL: float = 30.0
+    LOG_ARTEFACTS_UPLOAD_PATH: str
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def LOG_ARTIFACT_DIR(self) -> Path:
+        return REPO_PATH / self.LOG_ARTEFACTS_UPLOAD_PATH
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def MLFLOW_S3_ENDPOINT_URL(self) -> str:
         return f"http://{self.EXPERIMENT_TRACKING_HOST}:{self.MINIO_PORT}"
-    
+
     @computed_field  # type: ignore[prop-decorator]
     @property
     def MLFLOW_TRACKING_URI(self) -> str:
         return f"http://{self.EXPERIMENT_TRACKING_HOST}:{self.MLFLOW_PORT}"
+
 
 config = Config()
