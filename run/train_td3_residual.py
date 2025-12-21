@@ -350,19 +350,19 @@ def main(args: Args):
                                 global_step,
                             )
                     t_log_artifact = time.time()
-                    # log_json_artifact(
-                    #     episode_trajectory,
-                    #     f"trajectories",
-                    #     json_name=f"{global_step:010d}.json",
-                    # )
+                    log_json_artifact(
+                        episode_trajectory,
+                        f"trajectories",
+                        json_name=f"{global_step:010d}.json",
+                    )
                     t_log_robot_nav_trajectory = time.time()
-                    # if args.env_id.startswith("RobotNavigation"):
-                    #     log_robot_nav_trajectory(
-                    #         episode_trajectory,
-                    #         global_step,
-                    #         total_reward=float(info["episode"]["r"]),
-                    #         goal_reached=bool(info.get("goal_reached", False)),
-                    #     )
+                    if args.env_id.startswith("RobotNavigation"):
+                        log_robot_nav_trajectory(
+                            episode_trajectory,
+                            global_step,
+                            total_reward=float(info["episode"]["r"]),
+                            goal_reached=bool(info.get("goal_reached", False)),
+                        )
                     episode_trajectory = []
                     break
             tstop = time.time()

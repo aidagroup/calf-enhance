@@ -19,9 +19,13 @@ import git
 from src import REPO_PATH
 from loguru import logger
 from pathlib import Path
-from tempfile import TemporaryDirectory
 import json
 from src.config import config
+from src.utils.artifact_uploader import (
+    get_artifact_uploader,
+    init_artifact_uploader,
+    shutdown_artifact_uploader,
+)
 
 
 @dataclass
@@ -127,9 +131,10 @@ def mlflow_monitoring():
 
             mlflow.set_experiment(mlflow_config.experiment_name)
 
-            # print("run_name:", run_name)
             with mlflow.start_run(run_name=mlflow_config.run_name):
-                # log param
+                run_id = mlflow.active_run().info.run_id
+                init_artifact_uploader(run_id)
+
                 if len(args):
                     args_dict = vars(args[0])
                     [
@@ -138,7 +143,10 @@ def mlflow_monitoring():
                         if k != "mlflow"
                     ]
 
-                return func(*args, **kwargs)
+                try:
+                    return func(*args, **kwargs)
+                finally:
+                    shutdown_artifact_uploader()
 
         return inner2
 
@@ -163,10 +171,15 @@ def log_json_artifact(
                 return [float(f"{x:.{precision}f}") for x in arr.tolist()]
             return [self._process_array(x) for x in arr]
 
-    with TemporaryDirectory() as temp_dir:
-        temp_dir = Path(temp_dir)
-        json_path = temp_dir / json_name
-        json_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(json_path, "w") as f:
-            json.dump(json_dict, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
-        mlflow.log_artifact(json_path, artifact_name)
+    uploader = get_artifact_uploader()
+    if uploader is None:
+        raise RuntimeError(
+            "ArtifactUploader not initialized. Call init_artifact_uploader first."
+        )
+
+    target_dir = uploader.staging_dir / artifact_name
+    target_dir.mkdir(parents=True, exist_ok=True)
+
+    json_path = target_dir / json_name
+    with open(json_path, "w") as f:
+        json.dump(json_dict, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
