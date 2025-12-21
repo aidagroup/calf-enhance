@@ -11,11 +11,23 @@ class Config(BaseSettings):
         extra="ignore",
     )
 
-    MLFLOW_TRACKING_URI: str = "http://localhost:5000"
+    MINIO_PORT: int
+    MINIO_CONSOLE_PORT: int
+    MLFLOW_PORT: int
+    EXPERIMENT_TRACKING_HOST: str
+
     AWS_ACCESS_KEY_ID: str
     AWS_SECRET_ACCESS_KEY: str
     AWS_DEFAULT_REGION: str
-    MLFLOW_S3_ENDPOINT_URL: str = "http://localhost:9000"
 
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def MLFLOW_S3_ENDPOINT_URL(self) -> str:
+        return f"http://{self.EXPERIMENT_TRACKING_HOST}:{self.MINIO_PORT}"
+    
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def MLFLOW_TRACKING_URI(self) -> str:
+        return f"http://{self.EXPERIMENT_TRACKING_HOST}:{self.MLFLOW_PORT}"
 
 config = Config()
