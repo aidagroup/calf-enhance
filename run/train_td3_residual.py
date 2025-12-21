@@ -349,11 +349,13 @@ def main(args: Args):
                                 np.mean(rolling_window["targets_captured"]),
                                 global_step,
                             )
+                    t_log_artifact = time.time()
                     log_json_artifact(
                         episode_trajectory,
                         f"trajectories",
                         json_name=f"{global_step:010d}.json",
                     )
+                    t_log_robot_nav_trajectory = time.time()
                     if args.env_id.startswith("RobotNavigation"):
                         log_robot_nav_trajectory(
                             episode_trajectory,
@@ -365,6 +367,12 @@ def main(args: Args):
                     break
             tstop = time.time()
             print(f"Time taken: {tstop - tstart} seconds")
+            print(
+                f"Time taken to log artifact: {t_log_robot_nav_trajectory - t_log_artifact} seconds"
+            )
+            print(
+                f"Time taken to log robot nav trajectory: {tstop - t_log_robot_nav_trajectory} seconds"
+            )
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
         for idx, trunc in enumerate(truncations):
