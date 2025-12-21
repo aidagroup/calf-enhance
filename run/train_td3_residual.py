@@ -262,6 +262,7 @@ def main(args: Args):
         )
         # TRY NOT TO MODIFY: record rewards for plotting purposes
         if "final_info" in infos:
+            tstart = time.time()
             for info in infos["final_info"]:
                 if info is not None:
 
@@ -362,7 +363,8 @@ def main(args: Args):
                         )
                     episode_trajectory = []
                     break
-
+            tstop = time.time()
+            print(f"Time taken: {tstop - tstart} seconds")
         # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
         real_next_obs = next_obs.copy()
         for idx, trunc in enumerate(truncations):
