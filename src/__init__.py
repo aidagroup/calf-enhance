@@ -60,9 +60,9 @@ gym.register(
     kwargs={
         "config": RobotNavigationConfig(
             max_steps=1000,
-            obstacle_count=20,
-            target_count=20,
-            moving_obstacle_count=20,
+            obstacle_count=10,
+            target_count=10,
+            moving_obstacle_count=10,
             collect_targets=True,
             target_radius=0.05,
             target_reward=-40.0,
