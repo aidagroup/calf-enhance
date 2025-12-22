@@ -1,6 +1,7 @@
 import shutil
 import threading
 import time
+import uuid
 from pathlib import Path
 
 from loguru import logger
@@ -35,7 +36,7 @@ class ArtifactUploader:
 
     def start(self, run_id: str):
         self._run_id = run_id
-        self._staging_dir = self.base_staging_dir / run_id
+        self._staging_dir = self.base_staging_dir / run_id / "staging"
         self._staging_dir.mkdir(parents=True, exist_ok=True)
 
         self._stop_event.clear()
@@ -48,8 +49,10 @@ class ArtifactUploader:
         self._stop_event.set()
         if self._thread:
             self._thread.join()
-        if self._staging_dir and self._staging_dir.exists():
-            shutil.rmtree(self._staging_dir)
+        if self._staging_dir:
+            run_dir = self._staging_dir.parent
+            if run_dir.exists():
+                shutil.rmtree(run_dir)
         logger.info("ArtifactUploader stopped, all artifacts uploaded")
 
     def _worker_loop(self):
@@ -62,19 +65,21 @@ class ArtifactUploader:
         """Keep retrying until all files are uploaded."""
         max_retries = 5
         for attempt in range(max_retries):
-            with self._lock:
-                if not self._has_files():
-                    return
-                file_count = self._count_files()
-                logger.info(
-                    f"Final flush: {file_count} artifact(s), attempt {attempt + 1}/{max_retries}"
-                )
-                try:
-                    self._client.log_artifacts(self._run_id, str(self._staging_dir))
-                    self._clear_staging()
-                    return
-                except Exception as e:
-                    logger.warning(f"Flush attempt {attempt + 1} failed: {e}")
+            upload_dir = self._swap_staging()
+            if upload_dir is None:
+                return
+
+            file_count = sum(1 for f in upload_dir.rglob("*") if f.is_file())
+            logger.info(
+                f"Final flush: {file_count} artifact(s), attempt {attempt + 1}/{max_retries}"
+            )
+            try:
+                self._client.log_artifacts(self._run_id, str(upload_dir))
+                shutil.rmtree(upload_dir, ignore_errors=True)
+                return
+            except Exception as e:
+                logger.warning(f"Flush attempt {attempt + 1} failed: {e}")
+                shutil.rmtree(upload_dir, ignore_errors=True)
             if attempt < max_retries - 1:
                 time.sleep(2**attempt)
         logger.error(
@@ -82,29 +87,32 @@ class ArtifactUploader:
         )
 
     def _upload_all(self):
+        upload_dir = self._swap_staging()
+        if upload_dir is None:
+            return
+
+        file_count = sum(1 for f in upload_dir.rglob("*") if f.is_file())
+        logger.debug(f"Uploading {file_count} artifact(s)")
+
+        try:
+            self._client.log_artifacts(self._run_id, str(upload_dir))
+        except Exception as e:
+            logger.error(f"Failed to upload artifacts: {e}")
+        finally:
+            shutil.rmtree(upload_dir, ignore_errors=True)
+
+    def _swap_staging(self) -> Path | None:
+        """Atomically swap staging dir with a new one, return old for upload."""
         with self._lock:
             if not self._has_files():
-                return
-
-            file_count = self._count_files()
-            logger.debug(f"Uploading {file_count} artifact(s)")
-
-            try:
-                self._client.log_artifacts(self._run_id, str(self._staging_dir))
-                self._clear_staging()
-            except Exception as e:
-                logger.error(f"Failed to upload artifacts: {e}")
+                return None
+            upload_dir = self._staging_dir.parent / f"upload_{uuid.uuid4().hex[:8]}"
+            self._staging_dir.rename(upload_dir)
+            self._staging_dir.mkdir(parents=True, exist_ok=True)
+            return upload_dir
 
     def _has_files(self) -> bool:
-        return any(self._staging_dir.rglob("*"))
-
-    def _count_files(self) -> int:
-        return sum(1 for f in self._staging_dir.rglob("*") if f.is_file())
-
-    def _clear_staging(self):
-        for fpath in self._staging_dir.rglob("*"):
-            if fpath.is_file():
-                fpath.unlink()
+        return any(f.is_file() for f in self._staging_dir.rglob("*"))
 
 
 _uploader: ArtifactUploader | None = None
