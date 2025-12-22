@@ -21,12 +21,17 @@ class ArtifactUploader:
         self._staging_dir: Path | None = None
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
+        self._lock = threading.Lock()
 
     @property
     def staging_dir(self) -> Path:
         if self._staging_dir is None:
             raise RuntimeError("ArtifactUploader not started")
         return self._staging_dir
+
+    @property
+    def lock(self) -> threading.Lock:
+        return self._lock
 
     def start(self, run_id: str):
         self._run_id = run_id
@@ -57,36 +62,38 @@ class ArtifactUploader:
         """Keep retrying until all files are uploaded."""
         max_retries = 5
         for attempt in range(max_retries):
-            if not self._has_files():
-                return
-            file_count = self._count_files()
-            logger.info(
-                f"Final flush: {file_count} artifact(s), attempt {attempt + 1}/{max_retries}"
-            )
-            try:
-                self._client.log_artifacts(self._run_id, str(self._staging_dir))
-                self._clear_staging()
-                return
-            except Exception as e:
-                logger.warning(f"Flush attempt {attempt + 1} failed: {e}")
-                if attempt < max_retries - 1:
-                    time.sleep(2**attempt)
+            with self._lock:
+                if not self._has_files():
+                    return
+                file_count = self._count_files()
+                logger.info(
+                    f"Final flush: {file_count} artifact(s), attempt {attempt + 1}/{max_retries}"
+                )
+                try:
+                    self._client.log_artifacts(self._run_id, str(self._staging_dir))
+                    self._clear_staging()
+                    return
+                except Exception as e:
+                    logger.warning(f"Flush attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                time.sleep(2**attempt)
         logger.error(
             f"Failed to upload remaining artifacts after {max_retries} attempts"
         )
 
     def _upload_all(self):
-        if not self._has_files():
-            return
+        with self._lock:
+            if not self._has_files():
+                return
 
-        file_count = self._count_files()
-        logger.debug(f"Uploading {file_count} artifact(s)")
+            file_count = self._count_files()
+            logger.debug(f"Uploading {file_count} artifact(s)")
 
-        try:
-            self._client.log_artifacts(self._run_id, str(self._staging_dir))
-            self._clear_staging()
-        except Exception as e:
-            logger.error(f"Failed to upload artifacts: {e}")
+            try:
+                self._client.log_artifacts(self._run_id, str(self._staging_dir))
+                self._clear_staging()
+            except Exception as e:
+                logger.error(f"Failed to upload artifacts: {e}")
 
     def _has_files(self) -> bool:
         return any(self._staging_dir.rglob("*"))
@@ -95,11 +102,9 @@ class ArtifactUploader:
         return sum(1 for f in self._staging_dir.rglob("*") if f.is_file())
 
     def _clear_staging(self):
-        for item in self._staging_dir.iterdir():
-            if item.is_dir():
-                shutil.rmtree(item)
-            else:
-                item.unlink()
+        for fpath in self._staging_dir.rglob("*"):
+            if fpath.is_file():
+                fpath.unlink()
 
 
 _uploader: ArtifactUploader | None = None

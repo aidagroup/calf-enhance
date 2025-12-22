@@ -179,9 +179,9 @@ def log_json_artifact(
             "ArtifactUploader not initialized. Call init_artifact_uploader first."
         )
 
-    target_dir = uploader.staging_dir / artifact_name
-    target_dir.mkdir(parents=True, exist_ok=True)
-
-    json_path = target_dir / json_name
-    with open(json_path, "w") as f:
-        json.dump(json_dict, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
+    with uploader.lock:
+        target_dir = uploader.staging_dir / artifact_name
+        target_dir.mkdir(parents=True, exist_ok=True)
+        json_path = target_dir / json_name
+        with open(json_path, "w") as f:
+            json.dump(json_dict, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)

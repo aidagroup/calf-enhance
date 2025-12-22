@@ -96,9 +96,10 @@ def log_robot_nav_trajectory(
             "ArtifactUploader not initialized. Call init_artifact_uploader first."
         )
 
-    target_dir = uploader.staging_dir / artifact_subdir / "trajectories"
-    target_dir.mkdir(parents=True, exist_ok=True)
+    with uploader.lock:
+        target_dir = uploader.staging_dir / artifact_subdir / "trajectories"
+        target_dir.mkdir(parents=True, exist_ok=True)
+        plot_path = target_dir / f"robot_nav_traj_{global_step:010d}.png"
+        fig.savefig(plot_path, bbox_inches="tight")
 
-    plot_path = target_dir / f"robot_nav_traj_{global_step:010d}.png"
-    fig.savefig(plot_path, bbox_inches="tight")
     plt.close(fig)
