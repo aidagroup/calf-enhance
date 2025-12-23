@@ -111,7 +111,6 @@ def mlflow_monitoring():
             os.environ.setdefault(
                 "MLFLOW_S3_ENDPOINT_URL", config.MLFLOW_S3_ENDPOINT_URL
             )
-            mlflow.config.enable_async_logging(enable=True)
 
             mlflow.set_tracking_uri(mlflow_config.tracking_uri)
             repo = git.Repo(REPO_PATH)
