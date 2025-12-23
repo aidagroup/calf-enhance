@@ -302,16 +302,13 @@ def main(args: Args):
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info is not None:
+                    metrics = {}
 
                     print(
                         f"global_step={global_step}, episodic_return={info['episode']['r']}"
                     )
-                    mlflow.log_metric(
-                        "charts/episodic_return", info["episode"]["r"], global_step
-                    )
-                    mlflow.log_metric(
-                        "charts/episodic_length", info["episode"]["l"], global_step
-                    )
+                    metrics["charts/episodic_return"] = info["episode"]["r"]
+                    metrics["charts/episodic_length"] = info["episode"]["l"]
 
                     rolling_window["episodic_return"].append(info["episode"]["r"])
                     if (
@@ -319,94 +316,66 @@ def main(args: Args):
                         > args.rolling_average_window
                     ):
                         rolling_window["episodic_return"].pop(0)
-                    mlflow.log_metric(
-                        f"charts/episodic_return_rolling_{args.rolling_average_window}",
-                        sum(rolling_window["episodic_return"])
-                        / len(rolling_window["episodic_return"]),
-                        global_step,
+                    metrics[
+                        f"charts/episodic_return_rolling_{args.rolling_average_window}"
+                    ] = sum(rolling_window["episodic_return"]) / len(
+                        rolling_window["episodic_return"]
                     )
 
                     if args.env_id.startswith("UnderwaterDrone"):
-                        mlflow.log_metric(
-                            "episode_stats/is_in_hole",
-                            info["is_in_hole"],
-                            global_step,
-                        )
+                        metrics["episode_stats/is_in_hole"] = info["is_in_hole"]
                         rolling_window["is_in_hole"].append(info["is_in_hole"])
-                        mlflow.log_metric(
-                            f"episode_stats/is_in_hole_rolling_{args.rolling_average_window}",
-                            np.mean(rolling_window["is_in_hole"]),
-                            global_step,
-                        )
+                        metrics[
+                            f"episode_stats/is_in_hole_rolling_{args.rolling_average_window}"
+                        ] = np.mean(rolling_window["is_in_hole"])
 
-                        mlflow.log_metric(
-                            "episode_stats/avoidance_score",
-                            info["avoidance_score"],
-                            global_step,
-                        )
+                        metrics["episode_stats/avoidance_score"] = info[
+                            "avoidance_score"
+                        ]
                         rolling_window["avoidance_score"].append(
                             info["avoidance_score"]
                         )
-                        mlflow.log_metric(
-                            f"episode_stats/avoidance_score_rolling_{args.rolling_average_window}",
-                            np.mean(rolling_window["avoidance_score"]),
-                            global_step,
-                        )
+                        metrics[
+                            f"episode_stats/avoidance_score_rolling_{args.rolling_average_window}"
+                        ] = np.mean(rolling_window["avoidance_score"])
                     elif args.env_id.startswith("RobotNavigation"):
-                        mlflow.log_metric(
-                            "episode_stats/distance_to_goal",
-                            info.get("distance_to_goal", 0.0),
-                            global_step,
+                        metrics["episode_stats/distance_to_goal"] = info.get(
+                            "distance_to_goal", 0.0
                         )
                         rolling_window["distance_to_goal"].append(
                             info.get("distance_to_goal", 0.0)
                         )
-                        mlflow.log_metric(
-                            f"episode_stats/distance_to_goal_rolling_{args.rolling_average_window}",
-                            np.mean(rolling_window["distance_to_goal"]),
-                            global_step,
-                        )
-                        mlflow.log_metric(
-                            "episode_stats/in_obstacle",
-                            float(info.get("in_obstacle", False)),
-                            global_step,
+                        metrics[
+                            f"episode_stats/distance_to_goal_rolling_{args.rolling_average_window}"
+                        ] = np.mean(rolling_window["distance_to_goal"])
+                        metrics["episode_stats/in_obstacle"] = float(
+                            info.get("in_obstacle", False)
                         )
                         rolling_window["in_obstacle"].append(
                             float(info.get("in_obstacle", False))
                         )
-                        mlflow.log_metric(
-                            f"episode_stats/in_obstacle_rolling_{args.rolling_average_window}",
-                            np.mean(rolling_window["in_obstacle"]),
-                            global_step,
-                        )
+                        metrics[
+                            f"episode_stats/in_obstacle_rolling_{args.rolling_average_window}"
+                        ] = np.mean(rolling_window["in_obstacle"])
                         if "targets_captured_total" in info:
                             captures = float(info.get("targets_captured_total", 0.0))
-                            mlflow.log_metric(
-                                "episode_stats/targets_captured",
-                                captures,
-                                global_step,
-                            )
+                            metrics["episode_stats/targets_captured"] = captures
                             rolling_window["targets_captured"].append(captures)
-                            mlflow.log_metric(
-                                f"episode_stats/targets_captured_rolling_{args.rolling_average_window}",
-                                np.mean(rolling_window["targets_captured"]),
-                                global_step,
-                            )
+                            metrics[
+                                f"episode_stats/targets_captured_rolling_{args.rolling_average_window}"
+                            ] = np.mean(rolling_window["targets_captured"])
 
-                    mlflow.log_metric(
-                        "episode_stats/n_safe_actions",
-                        np.mean(n_safe_actions) / info["episode"]["l"],
-                        global_step,
+                    metrics["episode_stats/n_safe_actions"] = (
+                        np.mean(n_safe_actions) / info["episode"]["l"]
                     )
                     rolling_window["n_safe_actions"].append(np.mean(n_safe_actions))
 
-                    mlflow.log_metric(
-                        f"episode_stats/n_safe_actions_rolling_{args.rolling_average_window}",
-                        np.mean(rolling_window["n_safe_actions"]),
-                        global_step,
-                    )
+                    metrics[
+                        f"episode_stats/n_safe_actions_rolling_{args.rolling_average_window}"
+                    ] = np.mean(rolling_window["n_safe_actions"])
                     rolling_episode_lengths.append(info["episode"]["l"])
 
+                    mlflow.log_metrics(metrics, global_step, synchronous=True)
                     log_json_artifact(
                         episode_trajectory,
                         f"trajectories",
@@ -458,16 +427,11 @@ def main(args: Args):
                     relax_probs[idx, 0] = args.calfq_p_relax_init
                     p_relax_decay = args.calfq_p_relax_decay
 
-                mlflow.log_metric(
-                    "calfq/p_relax",
-                    relax_probs[idx, 0],
-                    global_step,
-                )
-                mlflow.log_metric(
-                    "calfq/p_relax_decay",
-                    p_relax_decay,
-                    global_step,
-                )
+                metrics = {
+                    "calfq/p_relax": relax_probs[idx, 0],
+                    "calfq/p_relax_decay": p_relax_decay,
+                }
+                mlflow.log_metrics(metrics, global_step, synchronous=True)
 
         if np.any(~safe_actions_mask) or not args.calfq_selective_buffer:
             rb.add(obs, real_next_obs, actions, rewards, terminations, infos)

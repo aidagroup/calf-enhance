@@ -264,7 +264,6 @@ def main(args: Args):
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info is not None:
-
                     print(
                         f"global_step={global_step}, episodic_return={info['episode']['r']}"
                     )

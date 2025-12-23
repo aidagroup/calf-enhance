@@ -162,14 +162,14 @@ def main():
         if terminated or truncated:
             x, y, cos_theta, sin_theta, v_x, v_y, omega = observation
             theta = np.arctan2(sin_theta, cos_theta)
-            print(f"\nEpisode finished after {step+1} steps")
+            print(f"\nEpisode finished after {step + 1} steps")
             print(f"Final position: x={info['x']:.2f}, y={info['y']:.2f}")
             print(f"Final velocity: v_x={v_x:.2f}, v_y={v_y:.2f}")
             print(
-                f"Final orientation: theta={theta:.2f} (target={np.pi/2:.2f}), omega={omega:.2f}"
+                f"Final orientation: theta={theta:.2f} (target={np.pi / 2:.2f}), omega={omega:.2f}"
             )
             print(f"Total reward: {total_reward:.2f}")
-            print(f"Number of times in spot: {n_in_spot/1500:.2f}")
+            print(f"Number of times in spot: {n_in_spot / 1500:.2f}")
             break
 
     # Clean up
