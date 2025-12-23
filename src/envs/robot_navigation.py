@@ -323,8 +323,6 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         if self.config.collect_targets:
             captured = self._handle_target_captures()
             capture_reward = captured * self.config.target_reward
-            if captured > 0 and self._targets_remaining <= 0:
-                terminated = True
 
         if self.config.collect_targets:
             angle_penalty = self.config.heading_penalty_scale * (
