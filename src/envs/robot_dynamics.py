@@ -24,7 +24,7 @@ class RobotDynamicsConfig:
     target_position: Tuple[float, float] = (0, 0.5)
     target_radius: float = 0.05
     collectable_radius: float = 0.05
-    collectable_reward: float = 10.0
+    collectable_reward: float = 20.0
 
 
 class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
