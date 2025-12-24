@@ -156,7 +156,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             if distance_to_collectable < self.config.collectable_radius:
                 collectable_reward = self.config.collectable_reward
                 self.collectable_captured = True
-                self.freezed_diff = self.robot_position - self.collectable_position
+                self.freezed_diff = self.robot_position - self.target_position
 
         observation = self._get_observation()
         distance_to_target = np.linalg.norm(self.robot_position - self.target_position)
