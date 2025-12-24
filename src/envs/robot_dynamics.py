@@ -20,7 +20,7 @@ class RobotDynamicsConfig:
     max_angular_velocity: float = math.pi
     world_low: float = 0.0
     world_high: float = 1.0
-    start_position: Tuple[float, float] = (0.5, 0.5)
+    start_position_distribution: Tuple[Tuple[float, float], Tuple[float, float]] = ((0.5, 0.1), (0.9, 0.9))
     start_angle: float = 0.0
     clip_position: bool = True
     target_position: Tuple[float, float] = (0, 0.5)
@@ -100,8 +100,8 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         self._steps = 0
         self._last_action = np.zeros(2, dtype=np.float32)
 
-        position = np.array(self.config.start_position, dtype=np.float32)
-        angle = float(self.config.start_angle)
+        position = self._rng.uniform(self.config.start_position_distribution[0], self.config.start_position_distribution[1], 2)
+        angle = self._rng.uniform(0, 2 * math.pi)
         if options:
             if "position" in options:
                 position = np.asarray(options["position"], dtype=np.float32)
