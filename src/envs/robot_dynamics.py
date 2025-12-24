@@ -156,7 +156,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
                 collectable_reward = self.config.collectable_reward
                 self.collectable_captured = True
                 # Set collectable position to world_low - 1 when captured
-                self.collectable_position = np.full(2, self.config.world_low - 1.0, dtype=np.float32)
+                self.collectable_position = np.copy(self.config.target_position)
 
         observation = self._get_observation()
         distance_to_target = np.linalg.norm(self.robot_position - self.target_position)
