@@ -147,7 +147,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
 
         observation = self._get_observation()
         distance_to_target = np.linalg.norm(self.robot_position - self.target_position)
-        reward = -distance_to_target
+        reward = -1
         if self._steps % 100 == 0:
             print(f"Distance to target: {distance_to_target}")
         terminated = distance_to_target < self.target_radius
