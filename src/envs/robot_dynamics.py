@@ -23,6 +23,8 @@ class RobotDynamicsConfig:
     start_position: Tuple[float, float] = (0.5, 0.5)
     start_angle: float = 0.0
     clip_position: bool = True
+    target_position: Tuple[float, float] = (0, 0.5)
+    target_radius: float = 0.05
 
 
 class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
@@ -50,7 +52,9 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         self._last_action = np.zeros(2, dtype=np.float32)
         self.robot_position = np.zeros(2, dtype=np.float32)
         self.robot_angle = 0.0
-
+        self.target_position = np.array(self.config.target_position, dtype=np.float32)
+        self.target_radius = self.config.target_radius
+    
         self.action_space = spaces.Box(
             low=np.array(
                 [0.0, -self.config.max_angular_velocity],
@@ -63,11 +67,11 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             dtype=np.float32,
         )
         obs_low = np.array(
-            [self.config.world_low, self.config.world_low, -math.pi],
+            [self.config.world_low, self.config.world_low, -1.0, -1.0],
             dtype=np.float32,
         )
         obs_high = np.array(
-            [self.config.world_high, self.config.world_high, math.pi],
+            [self.config.world_high, self.config.world_high, 1.0, 1.0],
             dtype=np.float32,
         )
         self.observation_space = spaces.Box(
@@ -131,7 +135,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         self.robot_position = self.robot_position + delta * (
             speed * self.config.control_dt
         )
-        if self.config.clip_position:
+        if self.config.clip_position:                
             self.robot_position = np.clip(
                 self.robot_position,
                 self.config.world_low,
@@ -143,7 +147,8 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
 
         observation = self._get_observation()
         reward = -1
-        terminated = False
+        terminated = np.linalg.norm(self.robot_position - self.target_position) < self.target_radius
+
         truncated = self._steps >= self.config.max_steps
         info = {
             "robot_angle": self.robot_angle,
@@ -154,7 +159,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
 
     def _get_observation(self) -> np.ndarray:
         return np.array(
-            [self.robot_position[0], self.robot_position[1], self.robot_angle],
+            [self.robot_position[0], self.robot_position[1], np.cos(self.robot_angle), np.sin(self.robot_angle)],
             dtype=np.float32,
         )
 
