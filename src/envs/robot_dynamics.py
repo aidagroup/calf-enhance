@@ -14,17 +14,17 @@ from gymnasium.utils import seeding
 class RobotDynamicsConfig:
     """Configuration values for the robot dynamics environment."""
 
-    max_steps: int = 400
     max_speed: float = 0.15
     control_dt: float = 0.05
     max_angular_velocity: float = math.pi
     world_low: float = 0.0
     world_high: float = 1.0
     start_position_distribution: Tuple[Tuple[float, float], Tuple[float, float]] = ((0.5, 0.1), (0.9, 0.9))
-    start_angle: float = 0.0
-    clip_position: bool = True
+    start_angle_distribution: Tuple[float, float] = (0.0, 2 * math.pi)
     target_position: Tuple[float, float] = (0, 0.5)
     target_radius: float = 0.05
+    collectable_radius: float = 0.05
+    collectable_reward: float = 10.0
 
 
 class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
@@ -54,6 +54,8 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         self.robot_angle = 0.0
         self.target_position = np.array(self.config.target_position, dtype=np.float32)
         self.target_radius = self.config.target_radius
+        self.collectable_position = np.zeros(2, dtype=np.float32)
+        self.collectable_captured = False
     
         self.action_space = spaces.Box(
             low=np.array(
@@ -66,12 +68,13 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             ),
             dtype=np.float32,
         )
+        # Observation: [robot_x, robot_y, cos(angle), sin(angle), collectable_x, collectable_y]
         obs_low = np.array(
-            [self.config.world_low, self.config.world_low, -1.0, -1.0],
+            [self.config.world_low, self.config.world_low, -1.0, -1.0, self.config.world_low - 1.0, self.config.world_low - 1.0],
             dtype=np.float32,
         )
         obs_high = np.array(
-            [self.config.world_high, self.config.world_high, 1.0, 1.0],
+            [self.config.world_high, self.config.world_high, 1.0, 1.0, self.config.world_high, self.config.world_high],
             dtype=np.float32,
         )
         self.observation_space = spaces.Box(
@@ -97,11 +100,8 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             self.np_random, _ = seeding.np_random(seed)
         self._rng = self.np_random
 
-        self._steps = 0
-        self._last_action = np.zeros(2, dtype=np.float32)
-
         position = self._rng.uniform(self.config.start_position_distribution[0], self.config.start_position_distribution[1], 2)
-        angle = self._rng.uniform(0, 2 * math.pi)
+        angle = self._rng.uniform(self.config.start_angle_distribution[0], self.config.start_angle_distribution[1])
         if options:
             if "position" in options:
                 position = np.asarray(options["position"], dtype=np.float32)
@@ -111,19 +111,22 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         self.robot_position = position
         self.robot_angle = self._wrap_angle(angle)
 
+        # Spawn collectable at random position within world bounds
+        self.collectable_position = self._rng.uniform(
+            self.config.world_low, self.config.world_high, 2
+        ).astype(np.float32)
+        self.collectable_captured = False
+
         observation = self._get_observation()
         info = {
-            "robot_angle": self.robot_angle,
-            "last_action": self._last_action.copy(),
+            "distance_to_target": np.linalg.norm(self.robot_position - self.target_position),
+            "collectable_captured": self.collectable_captured,
         }
         return observation, info
 
     def step(self, action: np.ndarray) -> Tuple[np.ndarray, float, bool, bool, dict]:
         action = np.asarray(action, dtype=np.float32)
         action = np.clip(action, self.action_space.low, self.action_space.high)
-
-        self._last_action = action
-        self._steps += 1
 
         speed = float(action[0])
         angular_velocity = float(action[1])
@@ -135,34 +138,46 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         self.robot_position = self.robot_position + delta * (
             speed * self.config.control_dt
         )
-        if self.config.clip_position:                
-            self.robot_position = np.clip(
-                self.robot_position,
-                self.config.world_low,
-                self.config.world_high,
-            )
+        self.robot_position = np.clip(
+            self.robot_position,
+            self.config.world_low,
+            self.config.world_high,
+        )
         self.robot_angle = self._wrap_angle(
             self.robot_angle + angular_velocity * self.config.control_dt
         )
 
+        # Check if collectable is captured
+        collectable_reward = 0.0
+        if not self.collectable_captured:
+            distance_to_collectable = np.linalg.norm(self.robot_position - self.collectable_position)
+            if distance_to_collectable < self.config.collectable_radius:
+                collectable_reward = self.config.collectable_reward
+                self.collectable_captured = True
+                # Set collectable position to world_low - 1 when captured
+                self.collectable_position = np.full(2, self.config.world_low - 1.0, dtype=np.float32)
+
         observation = self._get_observation()
         distance_to_target = np.linalg.norm(self.robot_position - self.target_position)
-        reward = -distance_to_target
-        if self._steps % 100 == 0:
-            print(f"Distance to target: {distance_to_target}")
+        reward = -distance_to_target + collectable_reward
         terminated = distance_to_target < self.target_radius
 
-        truncated = self._steps >= self.config.max_steps
         info = {
-            "robot_angle": self.robot_angle,
-            "last_action": self._last_action.copy(),
-            "step": self._steps,
+            "distance_to_target": distance_to_target,
+            "collectable_captured": self.collectable_captured,
         }
-        return observation, reward, terminated, truncated, info
+        return observation, reward, terminated, False, info
 
     def _get_observation(self) -> np.ndarray:
         return np.array(
-            [self.robot_position[0], self.robot_position[1], np.cos(self.robot_angle), np.sin(self.robot_angle)],
+            [
+                self.robot_position[0],
+                self.robot_position[1],
+                np.cos(self.robot_angle),
+                np.sin(self.robot_angle),
+                self.collectable_position[0],
+                self.collectable_position[1],
+            ],
             dtype=np.float32,
         )
 
