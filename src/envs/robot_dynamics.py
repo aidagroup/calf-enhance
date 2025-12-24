@@ -173,8 +173,8 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
     def _get_observation(self) -> np.ndarray:
         return np.array(
             [
-                self.robot_position[0],
-                self.robot_position[1],
+                self.robot_position[0] - self.target_position[0],
+                self.robot_position[1] - self.target_position[1],
                 np.cos(self.robot_angle),
                 np.sin(self.robot_angle),
                 self.robot_position[0] - self.collectable_position[0] if self.collectable_captured else self.robot_position[0] - self.target_position[0],
