@@ -71,11 +71,11 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         )
         # Observation: [robot_x, robot_y, cos(angle), sin(angle), collectable_x, collectable_y]
         obs_low = np.array(
-            [self.config.world_low, self.config.world_low, -1.0, -1.0, self.config.world_low, self.config.world_low],
+            [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
             dtype=np.float32,
         )
         obs_high = np.array(
-            [self.config.world_high, self.config.world_high, 1.0, 1.0, self.config.world_high, self.config.world_high],
+            [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
             dtype=np.float32,
         )
         self.observation_space = spaces.Box(
