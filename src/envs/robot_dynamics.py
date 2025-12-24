@@ -147,7 +147,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
 
         observation = self._get_observation()
         distance_to_target = np.linalg.norm(self.robot_position - self.target_position)
-        reward = -distance_to_target
+        reward = -distance_to_target * 0.001
         terminated = distance_to_target < self.target_radius
 
         truncated = self._steps >= self.config.max_steps
