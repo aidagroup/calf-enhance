@@ -25,6 +25,7 @@ class RobotDynamicsConfig:
     target_radius: float = 0.05
     collectable_radius: float = 0.05
     collectable_reward: float = 20.0
+    terminal_reward: float = 20.0
 
 
 class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
@@ -161,6 +162,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         distance_to_target = np.linalg.norm(self.robot_position - self.target_position)
         reward = -distance_to_target + collectable_reward
         terminated = distance_to_target < self.target_radius
+        reward += terminated * self.config.terminal_reward
 
         info = {
             "distance_to_target": distance_to_target,
