@@ -71,11 +71,11 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         )
         # Observation: [robot_x, robot_y, cos(angle), sin(angle), collectable_x, collectable_y]
         obs_low = np.array(
-            [-1.0, -1.0, -1.0, -1.0, -1.0, -1.0],
+            [self.config.world_low, self.config.world_low, -1.0, -1.0, self.config.world_low, self.config.world_low, 0.0],
             dtype=np.float32,
         )
         obs_high = np.array(
-            [1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
+            [self.config.world_high, self.config.world_high, 1.0, 1.0, self.config.world_high, self.config.world_high, 1.0],
             dtype=np.float32,
         )
         self.observation_space = spaces.Box(
@@ -117,7 +117,6 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             self.config.world_low, self.config.world_high, 2
         ).astype(np.float32)
         self.collectable_captured = False
-        self.freezed_diff = np.zeros(2, dtype=np.float32)
 
         observation = self._get_observation()
         info = {
@@ -156,7 +155,6 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             if distance_to_collectable < self.config.collectable_radius:
                 collectable_reward = self.config.collectable_reward
                 self.collectable_captured = True
-                self.freezed_diff = self.robot_position - self.target_position
 
         observation = self._get_observation()
         distance_to_target = np.linalg.norm(self.robot_position - self.target_position)
@@ -173,12 +171,13 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
     def _get_observation(self) -> np.ndarray:
         return np.array(
             [
-                self.robot_position[0] - self.target_position[0],
-                self.robot_position[1] - self.target_position[1],
+                self.robot_position[0],
+                self.robot_position[1],
                 np.cos(self.robot_angle),
                 np.sin(self.robot_angle),
-                self.robot_position[0] - self.collectable_position[0] if self.collectable_captured else self.robot_position[0] - self.target_position[0],
-                self.robot_position[1] - self.collectable_position[1] if self.collectable_captured else self.robot_position[1] - self.target_position[1],
+                self.collectable_position[0],
+                self.collectable_position[1],
+                self.collectable_captured,
             ],
             dtype=np.float32,
         )
