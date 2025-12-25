@@ -63,7 +63,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
 
         self.action_space = spaces.Box(
             low=np.array(
-                [0.0, -self.config.max_angular_velocity],
+                [-self.config.max_speed, -self.config.max_angular_velocity],
                 dtype=np.float32,
             ),
             high=np.array(
