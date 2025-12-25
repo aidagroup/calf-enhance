@@ -19,7 +19,10 @@ class RobotDynamicsConfig:
     max_angular_velocity: float = math.pi
     world_low: float = 0.0
     world_high: float = 1.0
-    start_position_distribution: Tuple[Tuple[float, float], Tuple[float, float]] = ((0.5, 0.1), (0.9, 0.9))
+    start_position_distribution: Tuple[Tuple[float, float], Tuple[float, float]] = (
+        (0.5, 0.1),
+        (0.9, 0.9),
+    )
     start_angle_distribution: Tuple[float, float] = (0.0, 2 * math.pi)
     target_position: Tuple[float, float] = (0, 0.5)
     target_radius: float = 0.05
@@ -57,7 +60,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         self.target_radius = self.config.target_radius
         self.collectable_position = np.zeros(2, dtype=np.float32)
         self.collectable_captured = False
-    
+
         self.action_space = spaces.Box(
             low=np.array(
                 [0.0, -self.config.max_angular_velocity],
@@ -69,13 +72,29 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             ),
             dtype=np.float32,
         )
-        # Observation: [robot_x, robot_y, cos(angle), sin(angle), collectable_x, collectable_y]
+        # Observation: [robot_x, robot_y, cos(angle), sin(angle), collectable_x, collectable_y, collectable_captured]
         obs_low = np.array(
-            [self.config.world_low, self.config.world_low, -1.0, -1.0, self.config.world_low, self.config.world_low, 0.0],
+            [
+                self.config.world_low - self.config.world_high,
+                self.config.world_low - self.config.world_high,
+                -1.0,
+                -1.0,
+                self.config.world_low - self.config.world_high,
+                self.config.world_low - self.config.world_high,
+                0.0,
+            ],
             dtype=np.float32,
         )
         obs_high = np.array(
-            [self.config.world_high, self.config.world_high, 1.0, 1.0, self.config.world_high, self.config.world_high, 1.0],
+            [
+                self.config.world_high - self.config.world_low,
+                self.config.world_high - self.config.world_low,
+                1.0,
+                1.0,
+                self.config.world_high - self.config.world_low,
+                self.config.world_high - self.config.world_low,
+                1.0,
+            ],
             dtype=np.float32,
         )
         self.observation_space = spaces.Box(
@@ -101,8 +120,15 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             self.np_random, _ = seeding.np_random(seed)
         self._rng = self.np_random
 
-        position = self._rng.uniform(self.config.start_position_distribution[0], self.config.start_position_distribution[1], 2)
-        angle = self._rng.uniform(self.config.start_angle_distribution[0], self.config.start_angle_distribution[1])
+        position = self._rng.uniform(
+            self.config.start_position_distribution[0],
+            self.config.start_position_distribution[1],
+            2,
+        )
+        angle = self._rng.uniform(
+            self.config.start_angle_distribution[0],
+            self.config.start_angle_distribution[1],
+        )
         if options:
             if "position" in options:
                 position = np.asarray(options["position"], dtype=np.float32)
@@ -117,10 +143,13 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             self.config.world_low, self.config.world_high, 2
         ).astype(np.float32)
         self.collectable_captured = False
+        self.freezed_diff = np.zeros(2, dtype=np.float32)
 
         observation = self._get_observation()
         info = {
-            "distance_to_target": np.linalg.norm(self.robot_position - self.target_position),
+            "distance_to_target": np.linalg.norm(
+                self.robot_position - self.target_position
+            ),
             "collectable_captured": self.collectable_captured,
         }
         return observation, info
@@ -151,10 +180,13 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         # Check if collectable is captured
         collectable_reward = 0.0
         if not self.collectable_captured:
-            distance_to_collectable = np.linalg.norm(self.robot_position - self.collectable_position)
+            distance_to_collectable = np.linalg.norm(
+                self.robot_position - self.collectable_position
+            )
             if distance_to_collectable < self.config.collectable_radius:
                 collectable_reward = self.config.collectable_reward
                 self.collectable_captured = True
+                self.freezed_diff = self.robot_position - self.target_position
 
         observation = self._get_observation()
         distance_to_target = np.linalg.norm(self.robot_position - self.target_position)
@@ -171,12 +203,16 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
     def _get_observation(self) -> np.ndarray:
         return np.array(
             [
-                self.robot_position[0],
-                self.robot_position[1],
+                self.robot_position[0] - self.target_position[0],
+                self.robot_position[1] - self.target_position[1],
                 np.cos(self.robot_angle),
                 np.sin(self.robot_angle),
-                self.collectable_position[0],
-                self.collectable_position[1],
+                self.robot_position[0] - self.collectable_position[0]
+                if self.collectable_captured
+                else self.robot_position[0] - self.target_position[0],
+                self.robot_position[1] - self.collectable_position[1]
+                if self.collectable_captured
+                else self.robot_position[1] - self.target_position[1],
                 self.collectable_captured,
             ],
             dtype=np.float32,
