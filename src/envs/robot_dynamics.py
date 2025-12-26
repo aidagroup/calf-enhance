@@ -28,7 +28,7 @@ class RobotDynamicsConfig:
     target_radius: float = 0.05
     collectable_radius: float = 0.05
     collectable_reward: float = 20.0
-    terminal_reward: float = 20.0
+    terminal_reward: float = 0.0
 
 
 class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
