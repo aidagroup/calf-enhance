@@ -26,7 +26,7 @@ class RobotDynamicsConfig:
     start_angle_distribution: Tuple[float, float] = (0.0, 2 * math.pi)
     target_position: Tuple[float, float] = (0, 0.5)
     target_radius: float = 0.05
-    collectable_radius: float = 0.05
+    collectable_radius: float = 0.1
     collectable_reward: float = 50.0
     terminal_reward: float = 10.0
 
