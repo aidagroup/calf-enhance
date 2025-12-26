@@ -27,8 +27,8 @@ class RobotDynamicsConfig:
     target_position: Tuple[float, float] = (0, 0.5)
     target_radius: float = 0.05
     collectable_radius: float = 0.05
-    collectable_reward: float = 20.0
-    terminal_reward: float = 0.0
+    collectable_reward: float = 50.0
+    terminal_reward: float = 10.0
 
 
 class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
@@ -81,7 +81,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
                 -1.0,
                 self.config.world_low - self.config.world_high,
                 self.config.world_low - self.config.world_high,
-                # 0.0,
+                0.0,
             ],
             dtype=np.float32,
         )
@@ -93,7 +93,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
                 1.0,
                 self.config.world_high - self.config.world_low,
                 self.config.world_high - self.config.world_low,
-                # 1.0,
+                1.0,
             ],
             dtype=np.float32,
         )
@@ -213,7 +213,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
                 self.robot_position[1] - self.target_position[1]
                 if self.collectable_captured
                 else self.robot_position[1] - self.collectable_position[1],
-                # self.collectable_captured,
+                self.collectable_captured,
             ],
             dtype=np.float32,
         )
