@@ -26,6 +26,7 @@ class RobotDynamicsConfig:
     )
     start_angle_distribution: Tuple[float, float] = (0.0, 2 * math.pi)
     target_position: Tuple[float, float] = (0, 0.5)
+    target_positions: Optional[Tuple[Tuple[float, float], ...]] = None
     target_radius: float = 0.05
     collectable_radius: float = 0.1
     collectable_reward: float = 50.0
@@ -57,7 +58,11 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         self._last_action = np.zeros(2, dtype=np.float32)
         self.robot_position = np.zeros(2, dtype=np.float32)
         self.robot_angle = 0.0
-        self.target_position = np.array(self.config.target_position, dtype=np.float32)
+        self.target_positions = self._normalize_target_positions(
+            self.config.target_positions,
+            self.config.target_position,
+        )
+        self.target_position = self.target_positions[0].copy()
         self.target_radius = self.config.target_radius
         self.collectable_position = np.zeros(2, dtype=np.float32)
         self.collectable_captured = False
@@ -146,11 +151,10 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         self.collectable_captured = False
         self.freezed_diff = np.zeros(2, dtype=np.float32)
 
+        _, distance_to_target = self._get_target_state()
         observation = self._get_observation()
         info = {
-            "distance_to_target": np.linalg.norm(
-                self.robot_position - self.target_position
-            ),
+            "distance_to_target": distance_to_target,
             "collectable_captured": self.collectable_captured,
         }
         return observation, info
@@ -178,6 +182,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
             self.robot_angle + angular_velocity * self.config.control_dt
         )
 
+        _, distance_to_target = self._get_target_state()
         # Check if collectable is captured
         collectable_reward = 0.0
         if not self.collectable_captured:
@@ -190,7 +195,6 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
                 self.freezed_diff = self.robot_position - self.target_position
 
         observation = self._get_observation()
-        distance_to_target = np.linalg.norm(self.robot_position - self.target_position)
         reward = -distance_to_target + collectable_reward
         terminated = distance_to_target < self.target_radius
         reward += terminated * self.config.terminal_reward
@@ -204,19 +208,19 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
     def _get_observation(self) -> np.ndarray:
         return np.array(
             [
-                self.robot_position[0] - self.target_position[0],
-                self.robot_position[1] - self.target_position[1],
+                self.robot_position[0],
+                self.robot_position[1],
                 np.cos(self.robot_angle),
                 np.sin(self.robot_angle),
                 (
-                    self.robot_position[0] - self.target_position[0]
+                    self.target_position[0]
                     if self.collectable_captured
-                    else self.robot_position[0] - self.collectable_position[0]
+                    else self.collectable_position[0]
                 ),
                 (
-                    self.robot_position[1] - self.target_position[1]
+                    self.target_position[1]
                     if self.collectable_captured
-                    else self.robot_position[1] - self.collectable_position[1]
+                    else self.collectable_position[1]
                 ),
                 self.collectable_captured,
             ],
@@ -226,6 +230,34 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
     @staticmethod
     def _wrap_angle(angle: float) -> float:
         return (angle + math.pi) % (2.0 * math.pi) - math.pi
+
+    @staticmethod
+    def _normalize_target_positions(
+        target_positions: Optional[Tuple[Tuple[float, float], ...]],
+        fallback_position: Tuple[float, float],
+    ) -> np.ndarray:
+        if target_positions is None:
+            positions = np.asarray(fallback_position, dtype=np.float32)
+        else:
+            positions = np.asarray(target_positions, dtype=np.float32)
+        if positions.ndim == 1:
+            if positions.shape[0] != 2:
+                raise ValueError(
+                    "RobotDynamicsEnv target_positions must be shape (N, 2)."
+                )
+            positions = positions.reshape(1, 2)
+        if positions.ndim != 2 or positions.shape[1] != 2 or positions.shape[0] == 0:
+            raise ValueError(
+                "RobotDynamicsEnv target_positions must be a non-empty (N, 2) array."
+            )
+        return positions
+
+    def _get_target_state(self) -> Tuple[np.ndarray, float]:
+        diffs = self.target_positions - self.robot_position
+        distances = np.linalg.norm(diffs, axis=1)
+        target_index = int(np.argmin(distances))
+        self.target_position = self.target_positions[target_index]
+        return self.target_position, float(distances[target_index])
 
 
 class RobotDynamicsMetricsCollector(MetricsCollector):
