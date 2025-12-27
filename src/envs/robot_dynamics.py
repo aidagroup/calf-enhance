@@ -202,7 +202,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
 
         info = {
             "distance_to_target": distance_to_target,
-            "collectable_captured": self.collectable_captured,
+            "collectable_captured": sum(self.collectable_captured),
         }
         return observation, reward, terminated, False, info
 
