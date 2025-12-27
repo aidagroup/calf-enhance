@@ -8,6 +8,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from gymnasium.utils import seeding
+from src.utils.metrics_controller import MetricsCollector
 
 
 @dataclass
@@ -207,12 +208,16 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
                 self.robot_position[1] - self.target_position[1],
                 np.cos(self.robot_angle),
                 np.sin(self.robot_angle),
-                self.robot_position[0] - self.target_position[0]
-                if self.collectable_captured
-                else self.robot_position[0] - self.collectable_position[0],
-                self.robot_position[1] - self.target_position[1]
-                if self.collectable_captured
-                else self.robot_position[1] - self.collectable_position[1],
+                (
+                    self.robot_position[0] - self.target_position[0]
+                    if self.collectable_captured
+                    else self.robot_position[0] - self.collectable_position[0]
+                ),
+                (
+                    self.robot_position[1] - self.target_position[1]
+                    if self.collectable_captured
+                    else self.robot_position[1] - self.collectable_position[1]
+                ),
                 self.collectable_captured,
             ],
             dtype=np.float32,
@@ -221,3 +226,16 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
     @staticmethod
     def _wrap_angle(angle: float) -> float:
         return (angle + math.pi) % (2.0 * math.pi) - math.pi
+
+
+class RobotDynamicsMetricsCollector(MetricsCollector):
+    def __init__(self, rolling_window_size: int = 20):
+        super().__init__()
+        self.rolling_window_size = rolling_window_size
+
+    def collect_env_related_metrics_from_info(self, info: dict, step: int) -> dict:
+        super().collect_env_related_metrics_from_info(info, step)
+        self.append_metric("distance_to_target", info["distance_to_target"], step=step)
+        self.append_metric(
+            "collectable_captured", info["collectable_captured"], step=step
+        )

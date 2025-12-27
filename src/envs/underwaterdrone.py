@@ -4,6 +4,7 @@ from gymnasium import spaces
 import pygame
 from typing import Optional, Tuple, Dict, Any
 from scipy.optimize import minimize_scalar
+from src.utils.metrics_controller import MetricsCollector
 
 TIME_STEP_SIZE = 0.02
 DRONE_MASS = 1.0
@@ -818,3 +819,28 @@ class UnderwaterDroneEnv(gym.Env):
             pygame.display.quit()
             pygame.quit()
             self.screen = None
+
+
+class UnderwaterDroneMetricsCollector(MetricsCollector):
+    def __init__(self, rolling_window_size: int = 20):
+        super().__init__()
+        self.rolling_window_size = rolling_window_size
+
+    def collect_metrics_from_final_episode_info(self, info: dict, step: int):
+        super().collect_metrics_from_final_episode_info(info, step)
+        self.append_metric("episode_stats/is_in_hole", info["is_in_hole"], step=step)
+        self.rolling_window["is_in_hole"].append(info["is_in_hole"])
+        self.append_metric(
+            f"episode_stats/is_in_hole_rolling_{self.rolling_window_size}",
+            np.mean(self.rolling_window["is_in_hole"]),
+            step=step,
+        )
+        self.append_metric(
+            "episode_stats/avoidance_score", info["avoidance_score"], step=step
+        )
+        self.rolling_window["avoidance_score"].append(info["avoidance_score"])
+        self.append_metric(
+            f"episode_stats/avoidance_score_rolling_{self.rolling_window_size}",
+            np.mean(self.rolling_window["avoidance_score"]),
+            step=step,
+        )

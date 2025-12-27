@@ -27,6 +27,12 @@ from src.utils.artifact_uploader import (
     shutdown_artifact_uploader,
 )
 
+from mlflow.entities import Metric
+import time
+import mlflow
+from collections import defaultdict
+from collections import deque
+
 
 @dataclass
 class MlflowConfig:
@@ -182,3 +188,10 @@ def log_json_artifact(
         json_path = target_dir / json_name
         with open(json_path, "w") as f:
             json.dump(json_dict, f, indent=2, ensure_ascii=False, cls=NumpyEncoder)
+
+
+def get_current_time_millis():
+    """
+    Returns the time in milliseconds since the epoch as an integer number.
+    """
+    return int(time.time() * 1000)
