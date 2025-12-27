@@ -3,6 +3,7 @@ import time
 import mlflow
 from collections import defaultdict
 from collections import deque
+import numpy as np
 
 
 def get_current_time_millis():
