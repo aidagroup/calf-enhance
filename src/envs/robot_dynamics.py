@@ -233,9 +233,14 @@ class RobotDynamicsMetricsCollector(MetricsCollector):
         super().__init__()
         self.rolling_window_size = rolling_window_size
 
-    def collect_env_related_metrics_from_info(self, info: dict, step: int) -> dict:
+    def collect_env_related_metrics_from_info(self, info: dict, step: int):
         super().collect_env_related_metrics_from_info(info, step)
-        self.append_metric("distance_to_target", info["distance_to_target"], step=step)
         self.append_metric(
-            "collectable_captured", info["collectable_captured"], step=step
+            "episode_stats/distance_to_target", info["distance_to_target"], step=step
         )
+        self.append_metric(
+            "episode_stats/collectable_captured",
+            info["collectable_captured"],
+            step=step,
+        )
+        self.rolling_window["collectable_captured"].append(info["collectable_captured"])
