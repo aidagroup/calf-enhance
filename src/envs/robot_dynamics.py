@@ -234,9 +234,7 @@ class RobotDynamicsMetricsCollector(MetricsCollector):
         self.rolling_window_size = rolling_window_size
 
     def collect_metrics_from_final_episode_info(self, info: dict, step: int):
-        print("collect_env_related_metrics_from_info")
         super().collect_metrics_from_final_episode_info(info, step)
-        print("after super().collect_env_related_metrics_from_info")
         self.append_metric(
             "episode_stats/distance_to_target", info["distance_to_target"], step=step
         )

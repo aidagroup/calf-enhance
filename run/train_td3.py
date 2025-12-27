@@ -196,7 +196,7 @@ def main(args: Args):
     metrics_collector = create_metrics_collector(
         args.env_id, args.rolling_average_window
     )
-    print(type(metrics_collector))
+    # print(type(metrics_collector))
 
     actor = Actor(envs).to(device)
     qf1 = QNetwork(envs).to(device)
