@@ -203,6 +203,7 @@ class RobotDynamicsEnv(gym.Env[np.ndarray, np.ndarray]):
         info = {
             "distance_to_target": distance_to_target,
             "collectable_captured": sum(self.collectable_captured),
+            "goal_reached": terminated,
         }
         return observation, reward, terminated, False, info
 
@@ -258,4 +259,18 @@ class RobotDynamicsMetricsCollector(MetricsCollector):
             info["collectable_captured"],
             step=step,
         )
+        self.append_metric(
+            "episode_stats/goal_reached", float(info["goal_reached"]), step=step
+        )
         self.rolling_window["collectable_captured"].append(info["collectable_captured"])
+        self.rolling_window["goal_reached"].append(float(info["goal_reached"]))
+        self.append_metric(
+            f"episode_stats/goal_reached_rolling_{self.rolling_window_size}",
+            np.mean(self.rolling_window["goal_reached"]),
+            step=step,
+        )
+        self.append_metric(
+            f"episode_stats/collectable_captured_rolling_{self.rolling_window_size}",
+            np.mean(self.rolling_window["collectable_captured"]),
+            step=step,
+        )
