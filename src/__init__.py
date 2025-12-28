@@ -77,5 +77,5 @@ gym.register(
 gym.register(
     id="RobotDynamics-v0",
     entry_point="src.envs:RobotDynamicsEnv",
-    max_episode_steps=400,
+    max_episode_steps=1000,
 )
