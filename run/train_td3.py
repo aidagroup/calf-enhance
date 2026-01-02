@@ -20,6 +20,7 @@ import mlflow
 from collections import defaultdict, deque
 from src.config import config
 from src.envs.robot_dynamics import RobotDynamicsMetricsCollector
+from src.envs.robot_navigation import RobotNavigationMetricsCollector
 from src.utils.metrics_controller import MetricsCollector
 
 
@@ -98,8 +99,9 @@ class Args:
 def create_metrics_collector(env_id: str, rolling_window_size: int = 20):
     if env_id.startswith("RobotDynamics"):
         return RobotDynamicsMetricsCollector(rolling_window_size)
-    else:
-        return MetricsCollector(rolling_window_size)
+    if env_id.startswith("RobotNavigation"):
+        return RobotNavigationMetricsCollector(rolling_window_size)
+    return MetricsCollector(rolling_window_size)
 
 
 def make_env(env_id, seed, idx, capture_video, run_name):
