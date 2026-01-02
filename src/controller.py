@@ -3,6 +3,7 @@ import numpy as np
 from src.envs.underwaterdrone import TOP_Y, DRONE_MASS, GRAVITY, MAX_F_LONG, MAX_F_LAT
 from src.envs.robot_dynamics import RobotDynamicsConfig
 from src.envs.robot_navigation import RobotNavigationConfig
+from src.envs.robot_navigation_const_speed import RobotNavigationConstSpeedConfig
 
 
 class UnderwaterDroneNominalController:
@@ -236,4 +237,44 @@ class RobotDynamicsGoalController:
         speed = np.where(distance < 1e-8, 0.0, speed)
 
         actions = np.hstack([speed, angular_velocity]).astype(np.float32)
+        return actions if batched else actions[0]
+
+
+class RobotNavigationConstSpeedGoalController:
+    """Controller for const-speed env. Returns 1D action [angular_velocity]."""
+
+    def __init__(
+        self,
+        turn_gain: float = 1.0,
+        max_turn_rate: float | None = None,
+    ) -> None:
+        config = RobotNavigationConstSpeedConfig()
+        self.turn_gain = float(turn_gain)
+        self.max_turn_rate = (
+            float(config.max_angular_velocity) if max_turn_rate is None else float(max_turn_rate)
+        )
+
+    def get_action(self, obs: np.ndarray) -> np.ndarray:
+        obs = np.asarray(obs)
+        batched = obs.ndim > 1
+        obs = obs if batched else obs[None, :]
+
+        robot = obs[:, 0:2]
+        heading_cos = obs[:, 2:3]
+        heading_sin = obs[:, 3:4]
+        current_angle = np.arctan2(heading_sin, heading_cos)
+        goal = obs[:, 4:6]
+
+        delta = goal - robot
+        distance = np.linalg.norm(delta, axis=1, keepdims=True)
+        desired_angle = np.arctan2(delta[:, 1], delta[:, 0])[:, None]
+        desired_angle = np.where(distance < 1e-8, current_angle, desired_angle)
+
+        angle_error = desired_angle - current_angle
+        angle_error = (angle_error + np.pi) % (2 * np.pi) - np.pi
+        angular_velocity = np.clip(
+            self.turn_gain * angle_error, -self.max_turn_rate, self.max_turn_rate
+        )
+
+        actions = angular_velocity.astype(np.float32)
         return actions if batched else actions[0]

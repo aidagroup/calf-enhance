@@ -1042,3 +1042,14 @@ class RobotNavigationMetricsCollector(MetricsCollector):
                 np.mean(self.rolling_window["targets_captured"]),
                 step=step,
             )
+        self.append_metric(
+            "episode_stats/goal_reached",
+            float(info.get("goal_reached", False)),
+            step=step,
+        )
+        self.rolling_window["goal_reached"].append(float(info.get("goal_reached", False)))
+        self.append_metric(
+            f"episode_stats/goal_reached_rolling_{self.rolling_window_size}",
+            np.mean(self.rolling_window["goal_reached"]),
+            step=step,
+        )

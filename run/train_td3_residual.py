@@ -21,6 +21,7 @@ from src.controller import (
     UnderwaterDroneNominalController,
     RobotDynamicsGoalController,
     RobotNavigationGoalController,
+    RobotNavigationConstSpeedGoalController,
 )
 from src.config import config
 from src.envs.robot_dynamics import RobotDynamicsMetricsCollector
@@ -230,6 +231,8 @@ def main(args: Args):
         controller = UnderwaterDroneNominalController()
     elif args.env_id.startswith("RobotDynamics"):
         controller = RobotDynamicsGoalController()
+    elif args.env_id.startswith("RobotNavigationConstSpeed"):
+        controller = RobotNavigationConstSpeedGoalController()
     elif args.env_id.startswith("RobotNavigation"):
         controller = RobotNavigationGoalController()
     else:

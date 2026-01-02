@@ -2,6 +2,7 @@ from pathlib import Path
 import gymnasium as gym
 
 from src.envs.robot_navigation import RobotNavigationConfig
+from src.envs.robot_navigation_const_speed import RobotNavigationConstSpeedConfig
 
 _DEFAULT_ROBOT_NAV_MAX_SPEED = RobotNavigationConfig().max_speed
 
@@ -77,5 +78,31 @@ gym.register(
 gym.register(
     id="RobotDynamics-v0",
     entry_point="src.envs:RobotDynamicsEnv",
+    max_episode_steps=1000,
+)
+
+gym.register(
+    id="RobotNavigationConstSpeed-v0",
+    entry_point="src.envs:RobotNavigationConstSpeedEnv",
+    max_episode_steps=300,
+)
+
+gym.register(
+    id="RobotNavigationConstSpeedCatch-v0",
+    entry_point="src.envs:RobotNavigationConstSpeedEnv",
+    kwargs={
+        "config": RobotNavigationConstSpeedConfig(
+            max_steps=1000,
+            obstacle_count=1,
+            target_count=1,
+            moving_obstacle_count=1,
+            collect_targets=True,
+            target_radius=0.05,
+            target_reward=50.0,
+            target_step_penalty=0.001,
+            moving_obstacle_radius=0.025,
+            moving_obstacle_speed=0.12,
+        )
+    },
     max_episode_steps=1000,
 )
