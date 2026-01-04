@@ -19,6 +19,8 @@ import stable_baselines3 as sb3
 import mlflow
 from collections import defaultdict, deque
 from src.config import config
+from src.envs.robot_dynamics import RobotDynamicsMetricsCollector
+from src.utils.metrics_controller import MetricsCollector
 
 
 @dataclass
@@ -91,6 +93,13 @@ class Args:
             + "__"
             + str(int(time.time()))
         )
+
+
+def create_metrics_collector(env_id: str, rolling_window_size: int = 20):
+    if env_id.startswith("RobotDynamics"):
+        return RobotDynamicsMetricsCollector(rolling_window_size)
+    else:
+        return MetricsCollector(rolling_window_size)
 
 
 def make_env(env_id, seed, idx, capture_video, run_name):
@@ -184,6 +193,10 @@ def main(args: Args):
             for i in range(args.num_envs)
         ]
     )
+    metrics_collector = create_metrics_collector(
+        args.env_id, args.rolling_average_window
+    )
+    # print(type(metrics_collector))
 
     actor = Actor(envs).to(device)
     qf1 = QNetwork(envs).to(device)
@@ -245,91 +258,15 @@ def main(args: Args):
         if "final_info" in infos:
             for info in infos["final_info"]:
                 if info is not None:
+                    metrics_collector.collect_metrics_from_final_episode_info(
+                        info, global_step
+                    )
 
                     print(
                         f"global_step={global_step}, episodic_return={info['episode']['r']}"
                     )
-                    mlflow.log_metric(
-                        "charts/episodic_return", info["episode"]["r"], global_step
-                    )
-                    mlflow.log_metric(
-                        "charts/episodic_length", info["episode"]["l"], global_step
-                    )
 
-                    rolling_window["episodic_return"].append(info["episode"]["r"])
-                    mlflow.log_metric(
-                        f"charts/episodic_return_rolling_{args.rolling_average_window}",
-                        np.mean(rolling_window["episodic_return"]),
-                        global_step,
-                    )
-
-                    if args.env_id.startswith("UnderwaterDrone"):
-                        mlflow.log_metric(
-                            "episode_stats/is_in_hole",
-                            info["is_in_hole"],
-                            global_step,
-                        )
-                        rolling_window["is_in_hole"].append(info["is_in_hole"])
-                        mlflow.log_metric(
-                            f"episode_stats/is_in_hole_rolling_{args.rolling_average_window}",
-                            np.mean(rolling_window["is_in_hole"]),
-                            global_step,
-                        )
-
-                        mlflow.log_metric(
-                            "episode_stats/avoidance_score",
-                            info["avoidance_score"],
-                            global_step,
-                        )
-                        rolling_window["avoidance_score"].append(
-                            info["avoidance_score"]
-                        )
-                        mlflow.log_metric(
-                            f"episode_stats/avoidance_score_rolling_{args.rolling_average_window}",
-                            np.mean(rolling_window["avoidance_score"]),
-                            global_step,
-                        )
-                    elif args.env_id.startswith("RobotNavigation"):
-                        mlflow.log_metric(
-                            "episode_stats/distance_to_goal",
-                            info.get("distance_to_goal", 0.0),
-                            global_step,
-                        )
-                        rolling_window["distance_to_goal"].append(
-                            info.get("distance_to_goal", 0.0)
-                        )
-                        mlflow.log_metric(
-                            f"episode_stats/distance_to_goal_rolling_{args.rolling_average_window}",
-                            np.mean(rolling_window["distance_to_goal"]),
-                            global_step,
-                        )
-
-                        mlflow.log_metric(
-                            "episode_stats/in_obstacle",
-                            float(info.get("in_obstacle", False)),
-                            global_step,
-                        )
-                        rolling_window["in_obstacle"].append(
-                            float(info.get("in_obstacle", False))
-                        )
-                        mlflow.log_metric(
-                            f"episode_stats/in_obstacle_rolling_{args.rolling_average_window}",
-                            np.mean(rolling_window["in_obstacle"]),
-                            global_step,
-                        )
-                        if "targets_captured_total" in info:
-                            captures = float(info.get("targets_captured_total", 0.0))
-                            mlflow.log_metric(
-                                "episode_stats/targets_captured",
-                                captures,
-                                global_step,
-                            )
-                            rolling_window["targets_captured"].append(captures)
-                            mlflow.log_metric(
-                                f"episode_stats/targets_captured_rolling_{args.rolling_average_window}",
-                                np.mean(rolling_window["targets_captured"]),
-                                global_step,
-                            )
+                    metrics_collector.log_pending_metrics(synchronous=True)
                     log_json_artifact(
                         episode_trajectory,
                         f"trajectories",
@@ -413,22 +350,43 @@ def main(args: Args):
                     )
 
             if global_step % 100 == 0:
-                mlflow.log_metric(
-                    "losses/qf1_values", qf1_a_values.mean().item(), global_step
+                metrics_collector.append_metric(
+                    "losses/qf1_values",
+                    qf1_a_values.mean().item(),
+                    step=global_step,
                 )
-                mlflow.log_metric(
-                    "losses/qf2_values", qf2_a_values.mean().item(), global_step
+                metrics_collector.append_metric(
+                    "losses/qf2_values",
+                    qf2_a_values.mean().item(),
+                    step=global_step,
                 )
-                mlflow.log_metric("losses/qf1_loss", qf1_loss.item(), global_step)
-                mlflow.log_metric("losses/qf2_loss", qf2_loss.item(), global_step)
-                mlflow.log_metric("losses/qf_loss", qf_loss.item() / 2.0, global_step)
-                mlflow.log_metric("losses/actor_loss", actor_loss.item(), global_step)
-                print("SPS:", int(global_step / (time.time() - start_time)))
-                mlflow.log_metric(
+                metrics_collector.append_metric(
+                    "losses/qf1_loss",
+                    qf1_loss.item(),
+                    step=global_step,
+                )
+                metrics_collector.append_metric(
+                    "losses/qf2_loss",
+                    qf2_loss.item(),
+                    step=global_step,
+                )
+                metrics_collector.append_metric(
+                    "losses/qf_loss",
+                    qf_loss.item() / 2.0,
+                    step=global_step,
+                )
+                metrics_collector.append_metric(
+                    "losses/actor_loss",
+                    actor_loss.item(),
+                    step=global_step,
+                )
+                metrics_collector.append_metric(
                     "charts/SPS",
                     int(global_step / (time.time() - start_time)),
-                    global_step,
+                    step=global_step,
                 )
+                print("SPS:", int(global_step / (time.time() - start_time)))
+                metrics_collector.log_pending_metrics(synchronous=True)
 
     # if args.save_model:
     #     model_path = f"runs/{run_name}/{args.exp_name}.cleanrl_model"

@@ -8,6 +8,7 @@ import gymnasium as gym
 import numpy as np
 from gymnasium import spaces
 from gymnasium.utils import seeding
+from src.utils.metrics_controller import MetricsCollector
 
 
 @dataclass
@@ -323,8 +324,6 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         if self.config.collect_targets:
             captured = self._handle_target_captures()
             capture_reward = captured * self.config.target_reward
-            if captured > 0 and self._targets_remaining <= 0:
-                terminated = True
 
         if self.config.collect_targets:
             angle_penalty = self.config.heading_penalty_scale * (
@@ -1001,3 +1000,45 @@ class SimpleGoalController:
             speed_ratio = min(1.0, distance / (self.max_speed * 8.0))
         speed_ratio = float(np.clip(speed_ratio, 0.0, 1.0))
         return np.array([speed_ratio, angular_velocity], dtype=np.float32)
+
+
+class RobotNavigationMetricsCollector(MetricsCollector):
+    def __init__(self, rolling_window_size: int = 20):
+        super().__init__()
+        self.rolling_window_size = rolling_window_size
+
+    def collect_metrics_from_final_episode_info(self, info: dict, step: int) -> dict:
+        super().collect_metrics_from_final_episode_info(info, step)
+        self.append_metric(
+            "episode_stats/distance_to_goal",
+            info.get("distance_to_goal", 0.0),
+            step=step,
+        )
+        self.rolling_window["distance_to_goal"].append(
+            info.get("distance_to_goal", 0.0)
+        )
+        self.append_metric(
+            f"episode_stats/distance_to_goal_rolling_{self.rolling_window_size}",
+            np.mean(self.rolling_window["distance_to_goal"]),
+            step=step,
+        )
+        self.append_metric(
+            "episode_stats/in_obstacle",
+            float(info.get("in_obstacle", False)),
+            step=step,
+        )
+        self.rolling_window["in_obstacle"].append(float(info.get("in_obstacle", False)))
+        self.append_metric(
+            f"episode_stats/in_obstacle_rolling_{self.rolling_window_size}",
+            np.mean(self.rolling_window["in_obstacle"]),
+            step=step,
+        )
+        if "targets_captured_total" in info:
+            captures = float(info.get("targets_captured_total", 0.0))
+            self.append_metric("episode_stats/targets_captured", captures, step=step)
+            self.rolling_window["targets_captured"].append(captures)
+            self.append_metric(
+                f"episode_stats/targets_captured_rolling_{self.rolling_window_size}",
+                np.mean(self.rolling_window["targets_captured"]),
+                step=step,
+            )

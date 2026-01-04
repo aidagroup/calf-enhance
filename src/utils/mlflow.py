@@ -27,6 +27,12 @@ from src.utils.artifact_uploader import (
     shutdown_artifact_uploader,
 )
 
+from mlflow.entities import Metric
+import time
+import mlflow
+from collections import defaultdict
+from collections import deque
+
 
 @dataclass
 class MlflowConfig:
@@ -49,11 +55,9 @@ class MLflowOutputFormat(KVWriter):
         key_excluded: Dict[str, Union[str, Tuple[str, ...]]],
         step: int = 0,
     ) -> None:
-
         for (key, value), (_, excluded) in zip(
             sorted(key_values.items()), sorted(key_excluded.items())
         ):
-
             if excluded is not None and "mlflow" in excluded:
                 continue
 
@@ -113,7 +117,6 @@ def mlflow_monitoring():
             os.environ.setdefault(
                 "MLFLOW_S3_ENDPOINT_URL", config.MLFLOW_S3_ENDPOINT_URL
             )
-            mlflow.config.enable_async_logging(enable=True)
 
             mlflow.set_tracking_uri(mlflow_config.tracking_uri)
             repo = git.Repo(REPO_PATH)

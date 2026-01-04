@@ -68,7 +68,7 @@ def json_to_video(json_file, output_file, fps=50):
         video.write(frame)
         frame_count += 1
         if i % 100 == 0:
-            print(f"Processed {i+1} frames...")
+            print(f"Processed {i + 1} frames...")
 
     # Release resources
     video.release()
