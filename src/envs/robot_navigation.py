@@ -332,7 +332,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             reward = -distance - angle_penalty
             reward += capture_reward
             if goal_reached:
-                reward += 10.0
+                reward += 0.0
         else:
             angle_penalty = self.config.heading_penalty_scale * (
                 heading_error / math.pi
