@@ -1,0 +1,82 @@
+% Auto-generated environment description for RobotNavigationConstSpeedCatch-v0.
+
+\section*{RobotNavigationConstSpeedCatch-v0}
+
+\paragraph{Workspace.}
+The robot moves in a bounded square workspace $\mathcal{X} = [0,1]^2$.
+The goal position is fixed at $(x_g, y_g) = (0, 0.5)$.
+The goal set is a disk of radius $r_g = 0.05$:
+\[
+\mathcal{G} = \{(x,y) \in [0,1]^2 \mid (x-x_g)^2 + (y-y_g)^2 \le r_g^2\}.
+\]
+
+\paragraph{Robot dynamics (discrete time).}
+The environment uses a fixed control step $\Delta t = 0.05$ s and a constant linear
+speed $v = 0.15$. The action is a scalar angular velocity command
+$\omega_t \in [-\pi,\pi]$ (clipped). Let $\theta_t$ be the robot heading.
+The state update is
+\begin{align*}
+  x_{t+1} &= \mathrm{clip}\bigl(x_t + v\,\Delta t\cos\theta_t,\; 0,\; 1\bigr), \\
+  y_{t+1} &= \mathrm{clip}\bigl(y_t + v\,\Delta t\sin\theta_t,\; 0,\; 1\bigr), \\
+  \theta_{t+1} &= \mathrm{wrap}(\theta_t + \omega_t\,\Delta t),
+\end{align*}
+where $\mathrm{wrap}$ maps angles to $[-\pi,\pi)$.
+
+\paragraph{Initial conditions.}
+The robot starts on the right side of the workspace with
+$x_0 \sim \mathrm{U}(0.7,0.9)$, $y_0 \sim \mathrm{U}(0.1,0.9)$, and
+$\theta_0 = \pi$ (facing left).
+
+\paragraph{Collectible targets (count = 1).}
+There is exactly one moving target. Its radius is
+$r_{\text{tgt}} = 0.05$ and its center is sampled uniformly with the
+constraints below.
+With one target, the x-coordinate is sampled from
+$[0.1 + r_{\text{tgt}},\; 0.9 - r_{\text{tgt}}] = [0.15, 0.85]$ and the
+y-coordinate from $[r_{\text{tgt}},\; 1-r_{\text{tgt}}] = [0.05, 0.95]$.
+The sampled center must also be at least $r_{\text{tgt}} + 0.005$ away from
+$\{(x_0,y_0)\}$. If placement fails (after bounded retries), the target center is
+sampled uniformly from $[r_{\text{tgt}}, 1-r_{\text{tgt}}]^2$.
+
+\paragraph{Target motion.}
+The target is treated as a moving obstacle with a velocity vector.
+Its initial direction is uniform on $[0,2\pi)$ and its speed is fixed to
+$0.12$. At each step, Gaussian noise is added to the velocity:
+$\epsilon \sim \mathcal{N}(0, \sigma^2 I)$ with
+$\sigma = 0.25 \times 0.12 = 0.03$. The velocity is then scaled to have
+magnitude at most $0.12$ (if the magnitude is near zero, a new random
+heading is sampled). The position update is
+$\mathbf{p}_{t+1} = \mathbf{p}_t + \mathbf{v}_t \Delta t$ with
+$\Delta t = 0.05$, followed by reflection at the bounds
+$[r_{\text{tgt}}, 1-r_{\text{tgt}}]$ (component-wise velocity sign flips).
+
+\paragraph{Capture condition.}
+The target is captured when the robot center is within
+$r_{\text{cap}} = \max(r_{\text{tgt}}, 0.08) = 0.08$ of the target center.
+Upon capture, the target radius is set to $0$ and its velocity is zeroed
+(it remains in the observation with radius $0$).
+
+\paragraph{Reward.}
+Let $d_t$ be the distance to the nearest remaining target (or $0$ if none).
+Let $\phi_t$ be the absolute heading error to that target (or $0$ if none).
+The reward is
+\[
+  r_t = -d_t - 0.2\,\frac{\phi_t}{\pi} + 50\cdot \mathbb{I}[\text{target captured}].
+\]
+There is no explicit goal reward and no obstacle collision penalty in this
+variant.
+
+\paragraph{Termination and truncation.}
+The episode terminates when the robot reaches the goal set
+($\|(x,y) - (x_g,y_g)\|_2 \le 0.05$). It is truncated at $T=1000$ steps.
+Note: termination does \emph{not} require that the target be captured.
+
+\paragraph{Observation.}
+The observation is a 9D vector:
+$[x, y, \cos\theta, \sin\theta, x_g, y_g, x_1, y_1, r_1]$,
+where $(x_1,y_1,r_1)$ describe the target (with $r_1=0$ if captured).
+All position components are in $[0,1]$ and $\cos\theta,\sin\theta \in [-1,1]$.
+
+\paragraph{Action space.}
+The action is one-dimensional: $\omega \in [-\pi, \pi]$.
+The linear speed is fixed at $v=0.15$.
