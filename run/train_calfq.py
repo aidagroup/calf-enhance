@@ -91,16 +91,30 @@ class Args:
     calfq_selective_buffer: bool = True
 
     def __post_init__(self):
-        self.mlflow.experiment_name = (
-            os.path.basename(__file__)[: -len(".py")] + "__" + self.env_id
-        )
-        self.mlflow.run_name = (
-            self.mlflow.experiment_name
-            + "__"
-            + str(self.seed)
-            + "__"
-            + str(int(time.time()))
-        )
+        default_experiment_name = os.path.basename(__file__)[: -len(".py")]
+        auto_experiment_name = default_experiment_name + "__" + self.env_id
+
+        # Respect CLI override: only auto-generate if user didn't change it.
+        if not self.mlflow.experiment_name or self.mlflow.experiment_name == default_experiment_name:
+            self.mlflow.experiment_name = auto_experiment_name
+
+        # Respect CLI override: only auto-generate if user didn't set it.
+        if not self.mlflow.run_name:
+            timestamp = int(time.time())
+            if "__" + self.env_id in self.mlflow.experiment_name:
+                self.mlflow.run_name = (
+                    self.mlflow.experiment_name + "__" + str(self.seed) + "__" + str(timestamp)
+                )
+            else:
+                self.mlflow.run_name = (
+                    self.mlflow.experiment_name
+                    + "__"
+                    + self.env_id
+                    + "__"
+                    + str(self.seed)
+                    + "__"
+                    + str(timestamp)
+                )
 
 
 def make_env(env_id, seed, idx, capture_video, run_name):
