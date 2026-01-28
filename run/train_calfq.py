@@ -208,13 +208,6 @@ def main(args: Args):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
-    print(
-        "critic",
-        args.calfq_critic_improvement_threshold,
-        "compare",
-        args.calfq_critic_improvement_threshold > 3,
-    )
-
     device = torch.device(args.device)
     # env setup
     envs = gym.vector.SyncVectorEnv(
