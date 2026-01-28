@@ -95,7 +95,10 @@ class Args:
         auto_experiment_name = default_experiment_name + "__" + self.env_id
 
         # Respect CLI override: only auto-generate if user didn't change it.
-        if not self.mlflow.experiment_name or self.mlflow.experiment_name == default_experiment_name:
+        if (
+            not self.mlflow.experiment_name
+            or self.mlflow.experiment_name == default_experiment_name
+        ):
             self.mlflow.experiment_name = auto_experiment_name
 
         # Respect CLI override: only auto-generate if user didn't set it.
@@ -103,7 +106,11 @@ class Args:
             timestamp = int(time.time())
             if "__" + self.env_id in self.mlflow.experiment_name:
                 self.mlflow.run_name = (
-                    self.mlflow.experiment_name + "__" + str(self.seed) + "__" + str(timestamp)
+                    self.mlflow.experiment_name
+                    + "__"
+                    + str(self.seed)
+                    + "__"
+                    + str(timestamp)
                 )
             else:
                 self.mlflow.run_name = (
@@ -201,7 +208,7 @@ def main(args: Args):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.backends.cudnn.deterministic = args.torch_deterministic
-
+    print(args.calfq_critic_improvement_threshold)
     device = torch.device(args.device)
     # env setup
     envs = gym.vector.SyncVectorEnv(
