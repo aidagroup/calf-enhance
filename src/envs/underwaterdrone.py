@@ -332,8 +332,8 @@ class UnderwaterDroneEnv(gym.Env):
         # ─── UnderwaterDroneEnv.__init__ ───
         self.last_action = np.zeros(2)  #  ←  add this anywhere in __init__
 
-        # Finish init by resetting
-        self.reset(seed=seed)
+        # Finish init by resetting (match restore behavior: no seed here)
+        self.reset()
 
     def reset(
         self, seed: Optional[int] = None, options: Optional[Dict[str, Any]] = None

@@ -111,6 +111,7 @@ def mlflow_monitoring():
     def inner1(func):
         def inner2(*args, **kwargs):
             mlflow_config: MlflowConfig = args[0].mlflow
+            disable_git = os.environ.get("MLFLOW_DISABLE_GIT", "").strip() == "1"
             os.environ.setdefault("AWS_ACCESS_KEY_ID", config.AWS_ACCESS_KEY_ID)
             os.environ.setdefault("AWS_SECRET_ACCESS_KEY", config.AWS_SECRET_ACCESS_KEY)
             os.environ.setdefault("AWS_DEFAULT_REGION", config.AWS_DEFAULT_REGION)
@@ -121,16 +122,17 @@ def mlflow_monitoring():
             mlflow.set_tracking_uri(mlflow_config.tracking_uri)
             repo = git.Repo(REPO_PATH)
 
-            if is_branch_exist("experiments"):
-                logger.info("Checking out to 'experiments' branch")
-                repo.git.checkout("experiments")
-            else:
-                logger.info("Creating new branch 'experiments'")
-                repo.git.checkout("-b", "experiments")
-            if repo.is_dirty():
-                logger.info("Auto committing before running")
-                repo.git.add(all=True)
-                repo.git.commit(message="feat: auto commit")
+            if not disable_git:
+                if is_branch_exist("experiments"):
+                    logger.info("Checking out to 'experiments' branch")
+                    repo.git.checkout("experiments")
+                else:
+                    logger.info("Creating new branch 'experiments'")
+                    repo.git.checkout("-b", "experiments")
+                if repo.is_dirty():
+                    logger.info("Auto committing before running")
+                    repo.git.add(all=True)
+                    repo.git.commit(message="feat: auto commit")
 
             mlflow.set_experiment(mlflow_config.experiment_name)
 
