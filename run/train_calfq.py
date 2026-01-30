@@ -28,6 +28,7 @@ from src.config import config
 from src.envs.robot_dynamics import RobotDynamicsMetricsCollector
 from src.envs.robot_navigation import RobotNavigationMetricsCollector
 from src.utils.metrics_controller import MetricsCollector
+from src.envs.underwaterdrone import UnderwaterDroneMetricsCollector
 
 
 @dataclass
@@ -147,6 +148,8 @@ def create_metrics_collector(env_id: str, rolling_window_size: int = 20):
         return RobotDynamicsMetricsCollector(rolling_window_size)
     if env_id.startswith("RobotNavigation"):
         return RobotNavigationMetricsCollector(rolling_window_size)
+    if env_id.startswith("UnderwaterDrone"):
+        return UnderwaterDroneMetricsCollector(rolling_window_size)
     return MetricsCollector(rolling_window_size)
 
 
