@@ -82,6 +82,12 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         self._moving_speed_scales = np.zeros(0, dtype=np.float32)
         self._targets_remaining = 0
         self._target_total = 0
+        self.trajectory: list[np.ndarray] = []
+        self.captured_points: list[np.ndarray] = []
+        self.show_trajectory = False
+        self.show_captured_points = True
+        # Screen-space light direction (points towards the light). Default: top-left.
+        self.light_dir = np.array([-1.0, -1.0], dtype=np.float32)
 
         self.action_space = spaces.Box(
             low=np.array(
@@ -110,6 +116,10 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         self._window = None
         self._clock = None
         self._surface = None
+        self._floor_surface = None
+        self._floor_size = None
+        self._room_geom_size = None
+        self._room_geom = None
 
         if seed is None:
             self.np_random, _ = seeding.np_random(None)
@@ -264,6 +274,9 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
             self._targets_remaining = 0
             self._target_total = 0
 
+        self.trajectory = [self.robot_position.copy()]
+        self.captured_points = []
+
         observation = self._get_observation()
         info = {
             "distance_to_goal": self._distance_to_goal(),
@@ -299,6 +312,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         self.robot_angle = self._wrap_angle(
             self.robot_angle + angular_velocity * self.config.control_dt
         )
+        self.trajectory.append(self.robot_position.copy())
 
         if self.config.collect_targets:
             distance = self._distance_to_nearest_target()
@@ -388,12 +402,15 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         if self._surface is None:
             self._surface = pygame.Surface((width, height))
 
-        self._surface.fill((240, 240, 240))
+        self._draw_floor()
         self._draw_room()
         self._draw_goal()
         self._draw_obstacles()
-        center = self._world_to_screen(self.robot_position)
-        self._draw_robot_body(center, min(width, height))
+        if self.show_trajectory:
+            self._draw_trajectory()
+        if self.show_captured_points:
+            self._draw_captured_points()
+        self._draw_robot()
 
         if self.render_mode == "human":
             self._window.blit(self._surface, (0, 0))
@@ -797,6 +814,7 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
                 self._obstacles[idx, 2] = 0.0
                 self._obstacles[idx, 0:2] = center
                 captured += 1
+                self.captured_points.append(center.copy())
                 order = self._moving_index_order.get(idx)
                 if order is not None and order < len(self._moving_velocities):
                     self._moving_velocities[order] = 0.0
@@ -834,127 +852,602 @@ class RobotNavigationEnv(gym.Env[np.ndarray, np.ndarray]):
         self._clock = pygame.time.Clock()
 
     def _world_to_screen(self, position: np.ndarray) -> Tuple[int, int]:
-        width, height = self.config.window_size
-        x = int(position[0] * width)
-        y = int((1.0 - position[1]) * height)
+        floor_left, floor_top, floor_width, floor_height = self._content_rect()
+        x = int(floor_left + float(position[0]) * floor_width)
+        y = int(floor_top + (1.0 - float(position[1])) * floor_height)
         return x, y
+
+    def _robot_visual_scale(self) -> float:
+        return 0.425
+
+    def _robot_visual_body_radius_px(self, scale: int) -> int:
+        return max(2, int(0.045 * scale * self._robot_visual_scale()))
+
+    def _robot_visual_clearance_px(self, scale: int) -> int:
+        body_radius = self._robot_visual_body_radius_px(scale)
+        size = int(body_radius * 6)
+        size = max(size, int(body_radius * 4 + max(16, body_radius * 2)))
+        half_diag = int(math.ceil((float(size) * math.sqrt(2.0)) / 2.0))
+        return max(2, half_diag + max(2, int(body_radius * 0.4)))
+
+    def _room_geometry(self) -> Tuple[Tuple[int, int, int, int, int, int, int, int, int], int]:
+        width, height = self.config.window_size
+        size = (width, height)
+        if self._room_geom is not None and self._room_geom_size == size:
+            return self._room_geom, int(self._room_geom[4])
+
+        base = min(width, height)
+        # Rendering-only geometry.
+        #
+        # `wall` controls the visible thickness (depth) of the trapezoid walls.
+        # Keep the outer frame inside the window, and accept that thicker walls
+        # reduce the visible floor area (but keep the mapping for robot/trajectory
+        # in `_content_rect`, so visuals still look correct).
+        margin = max(12, int(base * 0.04))
+        wall = max(13, int(base * 0.09))
+
+        outer_left = margin
+        outer_top = margin
+        outer_width = max(1, width - 2 * margin)
+        outer_height = max(1, height - 2 * margin)
+
+        min_outer = 2 * wall + max(80, int(base * 0.25))
+        if outer_width < min_outer:
+            outer_width = min_outer
+            outer_left = max(0, (width - outer_width) // 2)
+        if outer_height < min_outer:
+            outer_height = min_outer
+            outer_top = max(0, (height - outer_height) // 2)
+
+        floor_left = outer_left + wall
+        floor_top = outer_top + wall
+        floor_width = max(1, outer_width - 2 * wall)
+        floor_height = max(1, outer_height - 2 * wall)
+
+        self._room_geom = (
+            outer_left,
+            outer_top,
+            outer_width,
+            outer_height,
+            wall,
+            floor_left,
+            floor_top,
+            floor_width,
+            floor_height,
+        )
+        self._room_geom_size = size
+        return self._room_geom, wall
+
+    def _floor_rect(self) -> Tuple[int, int, int, int]:
+        geom, _ = self._room_geometry()
+        return int(geom[5]), int(geom[6]), int(geom[7]), int(geom[8])
+
+    def _draw_outer_frame(self, outer: "pygame.Rect", wall: int) -> None:
+        pygame = self._pygame
+        width, height = self.config.window_size
+
+        # A thick "bezel" outside the room makes the wall edge read as solid material,
+        # not a thin cardboard line.
+        bezel = max(14, int(wall * 0.55))
+        frame_outer = outer.inflate(bezel * 2, bezel * 2)
+
+        fx = pygame.Surface((width, height), flags=pygame.SRCALPHA)
+        # Outside the room should read as the same ground plane as the floor.
+        floor_h = max(1, outer.height - 2 * wall)
+        base = max(1, min(outer.width - 2 * wall, floor_h))
+        floor_left = outer.left + wall
+        floor_top = outer.top + wall
+
+        floor_base = (220, 222, 228)
+        pygame.draw.rect(fx, (*floor_base, 255), frame_outer)
+
+        minor_step = max(18, int(base * 0.045))
+        major_step = minor_step * 4
+        minor = (212, 214, 222, 255)
+        major = (195, 198, 208, 255)
+
+        x = floor_left
+        while x >= frame_outer.left:
+            x -= minor_step
+        while x <= frame_outer.right:
+            pygame.draw.line(fx, minor, (x, frame_outer.top), (x, frame_outer.bottom), width=1)
+            x += minor_step
+
+        y = floor_top
+        while y >= frame_outer.top:
+            y -= minor_step
+        while y <= frame_outer.bottom:
+            pygame.draw.line(fx, minor, (frame_outer.left, y), (frame_outer.right, y), width=1)
+            y += minor_step
+
+        x = floor_left
+        while x >= frame_outer.left:
+            x -= major_step
+        while x <= frame_outer.right:
+            pygame.draw.line(fx, major, (x, frame_outer.top), (x, frame_outer.bottom), width=2)
+            x += major_step
+
+        y = floor_top
+        while y >= frame_outer.top:
+            y -= major_step
+        while y <= frame_outer.bottom:
+            pygame.draw.line(fx, major, (frame_outer.left, y), (frame_outer.right, y), width=2)
+            y += major_step
+
+        pygame.draw.rect(fx, (0, 0, 0, 0), outer, border_radius=0)
+
+        self._surface.blit(fx, (0, 0))
+
+        # Inner cap band on the wall itself.
+        outer_rim_w = max(6, int(wall * 0.19))
+        pygame.draw.rect(
+            self._surface, (250, 250, 252), outer, width=outer_rim_w, border_radius=0
+        )
+
+    def _content_rect(self) -> Tuple[int, int, int, int]:
+        floor_left, floor_top, floor_w, floor_h = self._floor_rect()
+        base = min(floor_w, floor_h)
+        if base <= 1:
+            return floor_left, floor_top, floor_w, floor_h
+
+        max_margin = max(0, base // 2 - 2)
+        margin_factor = 0.55
+        margin = min(int(self._robot_visual_clearance_px(base) * margin_factor), max_margin)
+        for _ in range(2):
+            content_w = max(1, floor_w - 2 * margin)
+            content_h = max(1, floor_h - 2 * margin)
+            scale = min(content_w, content_h)
+            next_margin = min(
+                int(self._robot_visual_clearance_px(scale) * margin_factor), max_margin
+            )
+            if abs(next_margin - margin) <= 1:
+                break
+            margin = next_margin
+
+        return (
+            floor_left + margin,
+            floor_top + margin,
+            max(1, floor_w - 2 * margin),
+            max(1, floor_h - 2 * margin),
+        )
+
+    def _light_dir_unit(self) -> Tuple[float, float]:
+        ld = np.asarray(self.light_dir, dtype=np.float32).reshape(-1)
+        if ld.size < 2:
+            return (-0.7071, -0.7071)
+        x = float(ld[0])
+        y = float(ld[1])
+        norm = math.hypot(x, y)
+        if norm < 1e-6:
+            return (-0.7071, -0.7071)
+        return (x / norm, y / norm)
+
+    def _shadow_offset_px(self, scale: int) -> Tuple[int, int]:
+        lx, ly = self._light_dir_unit()
+        sx, sy = (-lx, -ly)
+        length = max(4, int(scale * 0.018))
+        return (int(sx * length), int(sy * length))
+
+    def _draw_floor(self) -> None:
+        pygame = self._pygame
+        width, height = self.config.window_size
+        self._surface.fill((190, 192, 198))
+
+        floor_left, floor_top, floor_w, floor_h = self._floor_rect()
+        size = (floor_w, floor_h)
+        if self._floor_surface is None or self._floor_size != size:
+            floor = pygame.Surface(size)
+
+            floor.fill((220, 222, 228))
+
+            # Grid (Unity-like: major + minor)
+            minor = (212, 214, 222)
+            major = (195, 198, 208)
+            base = min(floor_w, floor_h)
+            minor_step = max(18, int(base * 0.045))
+            major_step = minor_step * 4
+            for x in range(0, floor_w + 1, minor_step):
+                pygame.draw.line(floor, minor, (x, 0), (x, floor_h), width=1)
+            for y in range(0, floor_h + 1, minor_step):
+                pygame.draw.line(floor, minor, (0, y), (floor_w, y), width=1)
+            for x in range(0, floor_w + 1, major_step):
+                pygame.draw.line(floor, major, (x, 0), (x, floor_h), width=2)
+            for y in range(0, floor_h + 1, major_step):
+                pygame.draw.line(floor, major, (0, y), (floor_w, y), width=2)
+
+            self._floor_surface = floor
+            self._floor_size = size
+
+        self._surface.blit(self._floor_surface, (floor_left, floor_top))
 
     def _draw_room(self) -> None:
         pygame = self._pygame
         width, height = self.config.window_size
-        border_color = (50, 50, 50)
+        geom, wall = self._room_geometry()
+        outer = pygame.Rect(int(geom[0]), int(geom[1]), int(geom[2]), int(geom[3]))
+        floor = pygame.Rect(int(geom[5]), int(geom[6]), int(geom[7]), int(geom[8]))
+
+        shadow = pygame.Surface((width, height), flags=pygame.SRCALPHA)
+        sx, sy = self._shadow_offset_px(min(floor.width, floor.height))
+        shadow_rect = outer.move(int(sx * 0.8), int(sy * 0.9))
+        pygame.draw.rect(shadow, (0, 0, 0, 70), shadow_rect, border_radius=6)
+        self._surface.blit(shadow, (0, 0))
+
+        def lerp_point(a: Tuple[int, int], b: Tuple[int, int], t: float) -> Tuple[int, int]:
+            return (int(a[0] * (1.0 - t) + b[0] * t), int(a[1] * (1.0 - t) + b[1] * t))
+
+        def lerp_color(a: Tuple[int, int, int], b: Tuple[int, int, int], t: float) -> Tuple[int, int, int]:
+            return (
+                int(a[0] * (1.0 - t) + b[0] * t),
+                int(a[1] * (1.0 - t) + b[1] * t),
+                int(a[2] * (1.0 - t) + b[2] * t),
+            )
+
+        def shaded_trapezoid(
+            inner_a: Tuple[int, int],
+            inner_b: Tuple[int, int],
+            outer_a: Tuple[int, int],
+            outer_b: Tuple[int, int],
+            inner_color: Tuple[int, int, int],
+            outer_color: Tuple[int, int, int],
+        ) -> None:
+            steps = max(10, int(wall * 0.35))
+            for i in range(steps):
+                t0 = i / steps
+                t1 = (i + 1) / steps
+                a0 = lerp_point(inner_a, outer_a, t0)
+                b0 = lerp_point(inner_b, outer_b, t0)
+                a1 = lerp_point(inner_a, outer_a, t1)
+                b1 = lerp_point(inner_b, outer_b, t1)
+                col = lerp_color(inner_color, outer_color, (t0 + t1) * 0.5)
+                pygame.draw.polygon(self._surface, col, [a0, b0, b1, a1])
+
+        # Wall faces as trapezoids between outer and floor rects.
+        top_inner_a = (floor.left, floor.top)
+        top_inner_b = (floor.right, floor.top)
+        top_outer_a = (outer.left, outer.top)
+        top_outer_b = (outer.right, outer.top)
+        shaded_trapezoid(top_inner_a, top_inner_b, top_outer_a, top_outer_b, (95, 98, 112), (132, 136, 150))
+
+        left_inner_a = (floor.left, floor.bottom)
+        left_inner_b = (floor.left, floor.top)
+        left_outer_a = (outer.left, outer.bottom)
+        left_outer_b = (outer.left, outer.top)
+        shaded_trapezoid(left_inner_a, left_inner_b, left_outer_a, left_outer_b, (82, 85, 98), (118, 122, 136))
+
+        right_inner_a = (floor.right, floor.top)
+        right_inner_b = (floor.right, floor.bottom)
+        right_outer_a = (outer.right, outer.top)
+        right_outer_b = (outer.right, outer.bottom)
+        shaded_trapezoid(right_inner_a, right_inner_b, right_outer_a, right_outer_b, (62, 64, 74), (98, 102, 116))
+
+        bottom_inner_a = (floor.right, floor.bottom)
+        bottom_inner_b = (floor.left, floor.bottom)
+        bottom_outer_a = (outer.right, outer.bottom)
+        bottom_outer_b = (outer.left, outer.bottom)
+        shaded_trapezoid(bottom_inner_a, bottom_inner_b, bottom_outer_a, bottom_outer_b, (52, 54, 62), (82, 86, 98))
+
+        # Inner seam + contact shadow (also scale with wall thickness).
+        seam = pygame.Surface((width, height), flags=pygame.SRCALPHA)
+        # Keep it subtle: this reads as a "baseboard/plinth" at the wall-floor junction.
+        seam_inflate = max(3, int(wall * 0.07))
+        seam_w = max(4, int(wall * 0.12))
         pygame.draw.rect(
-            self._surface, border_color, pygame.Rect(0, 0, width, height), width=4
+            seam,
+            (0, 0, 0, 45),
+            floor.inflate(seam_inflate, seam_inflate),
+            width=seam_w,
+            border_radius=4,
         )
+        self._surface.blit(seam, (0, 0))
+        inner_outline_w = max(2, int(wall * 0.05))
+        pygame.draw.rect(
+            self._surface, (20, 22, 28), floor, width=inner_outline_w, border_radius=4
+        )
+
+        self._draw_outer_frame(outer, wall)
 
     def _draw_goal(self) -> None:
         pygame = self._pygame
-        width, height = self.config.window_size
-        goal_height = int(height * 0.2)
-        goal_rect = pygame.Rect(0, int(height * 0.4), int(width * 0.02), goal_height)
-        pygame.draw.rect(self._surface, (50, 200, 50), goal_rect)
+        geom, wall = self._room_geometry()
+        outer = pygame.Rect(int(geom[0]), int(geom[1]), int(geom[2]), int(geom[3]))
+        floor_left, floor_top, floor_w, floor_h = self._floor_rect()
+        floor = pygame.Rect(int(floor_left), int(floor_top), int(floor_w), int(floor_h))
+        content_left, content_top, content_w, content_h = self._content_rect()
+        content = pygame.Rect(int(content_left), int(content_top), int(content_w), int(content_h))
+        scale = min(content.width, content.height)
+
+        goal_px = self._world_to_screen(self.goal_position)
+        notch_h = max(int(scale * 0.065), int(wall * 0.75))
+        half_h = max(6, notch_h // 2)
+        center_y = int(np.clip(goal_px[1], floor.top + half_h + 2, floor.bottom - half_h - 2))
+        y_top_floor = center_y - half_h
+        y_bot_floor = center_y + half_h
+
+        def map_floor_y_to_outer_y(floor_y: int) -> int:
+            t = (floor_y - floor.top) / max(1.0, float(floor.height))
+            return int(outer.top + t * float(outer.height))
+
+        y_top_outer = map_floor_y_to_outer_y(y_top_floor)
+        y_bot_outer = map_floor_y_to_outer_y(y_bot_floor)
+
+        wall_depth = max(1, floor.left - outer.left)
+        notch_shift_left_px = max(3, int(wall_depth * 0.08))
+        notch_nudge_right_px = 2
+        x_outer = floor.left - max(2, int(wall_depth * 0.22)) - notch_shift_left_px + notch_nudge_right_px - 4
+        x_inner = floor.left + max(1, int(wall_depth * 0.04)) - notch_shift_left_px + notch_nudge_right_px
+        taper = max(1, int(half_h * 0.18))
+        outer_base_extra_px = max(2, int(half_h * 0.12))
+        right_base_extra_px = max(2, int(half_h * 0.10))
+        notch_poly = [
+            (x_outer, y_top_outer - outer_base_extra_px),
+            (x_outer, y_bot_outer + outer_base_extra_px),
+            (x_inner, y_bot_floor - taper + right_base_extra_px),
+            (x_inner, y_top_floor + taper - right_base_extra_px),
+        ]
+        pygame.draw.polygon(self._surface, (0, 0, 0), notch_poly)
 
     def _draw_obstacles(self) -> None:
         pygame = self._pygame
-        width, height = self.config.window_size
+        floor_left, floor_top, floor_w, floor_h = self._content_rect()
+        scale = min(floor_w, floor_h)
+        sx, sy = self._shadow_offset_px(scale)
+        lx, ly = self._light_dir_unit()
         for idx in range(self._num_obstacles):
             x, y, radius = self._obstacles[idx]
             center = self._world_to_screen(np.array([x, y], dtype=np.float32))
+            px_radius = int(radius * scale)
+            shadow_center = (center[0] + sx, center[1] + sy)
             pygame.draw.circle(
                 self._surface,
-                (180, 60, 60),
-                center,
-                int(radius * min(width, height)),
+                (120, 120, 130),
+                shadow_center,
+                max(1, px_radius),
+            )
+            pygame.draw.circle(self._surface, (235, 140, 45), center, max(1, px_radius))
+            pygame.draw.circle(
+                self._surface, (150, 82, 20), center, max(1, px_radius), width=2
+            )
+            highlight = (
+                int(center[0] + lx * px_radius * 0.35),
+                int(center[1] + ly * px_radius * 0.35),
+            )
+            pygame.draw.circle(
+                self._surface, (255, 220, 165), highlight, max(1, px_radius // 3)
             )
 
     def _draw_robot(self) -> None:
-        width, height = self.config.window_size
-        center = self._world_to_screen(self.robot_position)
-        self._draw_robot_body(center, min(width, height))
+        floor_left, floor_top, floor_w, floor_h = self._content_rect()
+        scale = min(floor_w, floor_h)
+        self._draw_robot_body(self._world_to_screen(self.robot_position), scale)
+
+    def _draw_trajectory(self) -> None:
+        if len(self.trajectory) < 2:
+            return
+        pygame = self._pygame
+        floor_left, floor_top, floor_w, floor_h = self._content_rect()
+        scale = min(floor_w, floor_h)
+        points = [self._world_to_screen(p) for p in self.trajectory]
+        color = (20, 40, 80)
+        line_width = max(2, int(scale * 0.004))
+        dash = max(10, int(scale * 0.02))
+        gap = max(7, int(scale * 0.014))
+
+        for start, end in zip(points[:-1], points[1:]):
+            x1, y1 = start
+            x2, y2 = end
+            dx = x2 - x1
+            dy = y2 - y1
+            dist = math.hypot(dx, dy)
+            if dist < 1e-6:
+                continue
+            step = dash + gap
+            ux = dx / dist
+            uy = dy / dist
+            t = 0.0
+            while t < dist:
+                t_end = min(dist, t + dash)
+                sx = int(x1 + ux * t)
+                sy = int(y1 + uy * t)
+                ex = int(x1 + ux * t_end)
+                ey = int(y1 + uy * t_end)
+                pygame.draw.line(
+                    self._surface, color, (sx, sy), (ex, ey), width=line_width
+                )
+                t += step
+
+    def _draw_captured_points(self) -> None:
+        if not self.captured_points:
+            return
+        pygame = self._pygame
+        floor_left, floor_top, floor_w, floor_h = self._content_rect()
+        scale = min(floor_w, floor_h)
+        radius = max(7, int(scale * 0.018))
+        stroke = max(2, radius // 4)
+        tick = radius + max(4, radius // 2)
+        for point in self.captured_points:
+            x, y = self._world_to_screen(point)
+            pygame.draw.circle(self._surface, (255, 220, 40), (x, y), radius)
+            pygame.draw.circle(
+                self._surface, (20, 20, 20), (x, y), radius, width=stroke
+            )
+            pygame.draw.line(
+                self._surface,
+                (20, 20, 20),
+                (x - tick, y),
+                (x + tick, y),
+                width=stroke,
+            )
+            pygame.draw.line(
+                self._surface,
+                (20, 20, 20),
+                (x, y - tick),
+                (x, y + tick),
+                width=stroke,
+            )
 
     def _draw_robot_body(self, center: Tuple[int, int], scale: int) -> None:
         pygame = self._pygame
-        body_radius = max(6, int(0.045 * scale))
+        body_radius = self._robot_visual_body_radius_px(scale)
 
-        speed_ratio = float(np.clip(self._last_action[0], 0.0, 1.0))
-        pulse_radius = body_radius + int(
-            2 + 3 * math.sin(self._steps * 0.3 + speed_ratio * math.pi)
-        )
-        pulse_radius = max(pulse_radius, body_radius + 1)
-
-        # Draw shimmering aura
-        pygame.draw.circle(
-            self._surface, (180, 200, 255), center, pulse_radius, width=2
+        speed_ratio = float(
+            np.clip(abs(float(np.asarray(self._last_action).reshape(-1)[0])), 0.0, 1.0)
         )
 
-        # Base body
-        pygame.draw.circle(self._surface, (60, 120, 240), center, body_radius)
-        pygame.draw.circle(self._surface, (20, 60, 160), center, body_radius, width=2)
-        highlight = (
-            center[0] + int(body_radius * 0.4),
-            center[1] - int(body_radius * 0.4),
+        # Shadow (screen-space, consistent with light direction; does not rotate with the robot).
+        sx, sy = self._shadow_offset_px(scale)
+        shadow_w = int(body_radius * 4.6)
+        shadow_h = int(body_radius * 3.6)
+        shadow_rect = pygame.Rect(0, 0, shadow_w, shadow_h)
+        shadow_rect.center = (center[0] + sx, center[1] + sy)
+        shadow_layer = pygame.Surface((shadow_w, shadow_h), flags=pygame.SRCALPHA)
+        shadow_layer.fill((0, 0, 0, 0))
+        pygame.draw.ellipse(
+            shadow_layer, (0, 0, 0, 60), pygame.Rect(0, 0, shadow_w, shadow_h)
         )
-        pygame.draw.circle(
-            self._surface, (220, 240, 255), highlight, max(1, body_radius // 3)
+        self._surface.blit(shadow_layer, shadow_rect.topleft)
+
+        # Build a small top-down sprite then rotate it.
+        size = int(body_radius * 6)
+        size = max(size, int(body_radius * 4 + max(16, body_radius * 2)))
+        sprite = pygame.Surface((size, size), flags=pygame.SRCALPHA)
+        cx = cy = size // 2
+
+        # Side tracks (top-down). Rectangles read better than wheels from above.
+        track_len = int(body_radius * 4.2)
+        track_thickness = int(body_radius * 1.35)
+        track_offset = int(body_radius * 2.25)
+        track_color = (35, 35, 40)
+        track_inner = (80, 80, 90)
+        track_outline = (15, 15, 18)
+        accent = (250, 140, 40)
+        outline_w = max(1, int(body_radius * 0.18))
+        inner_w = max(1, int(body_radius * 0.22))
+
+        for side in (-1, 1):
+            track_rect = pygame.Rect(0, 0, track_len, track_thickness)
+            track_rect.center = (cx, cy + side * track_offset)
+            radius = max(2, track_rect.height // 2)
+            pygame.draw.rect(sprite, track_color, track_rect, border_radius=radius)
+            pygame.draw.rect(
+                sprite, track_outline, track_rect, width=outline_w, border_radius=radius
+            )
+
+            shrink_x = max(6, int(track_rect.width * 0.12))
+            shrink_y = max(4, int(track_rect.height * 0.35))
+            inner_rect = track_rect.inflate(-shrink_x, -shrink_y)
+            if inner_rect.width > 2 and inner_rect.height > 2:
+                inner_radius = max(2, inner_rect.height // 2)
+                pygame.draw.rect(
+                    sprite, track_inner, inner_rect, width=inner_w, border_radius=inner_radius
+                )
+                accent_y = inner_rect.centery
+                pygame.draw.line(
+                    sprite,
+                    accent,
+                    (inner_rect.left + int(inner_rect.width * 0.18), accent_y),
+                    (inner_rect.right - int(inner_rect.width * 0.18), accent_y),
+                    width=max(1, int(track_rect.height * 0.12)),
+                )
+
+        # Main body shell
+        body_w = int(body_radius * 3.6)
+        body_h = int(body_radius * 3.0)
+        body_rect = pygame.Rect(0, 0, body_w, body_h)
+        body_rect.center = (cx, cy)
+        pygame.draw.ellipse(sprite, (248, 248, 252), body_rect)
+        pygame.draw.ellipse(
+            sprite, (145, 150, 162), body_rect, width=max(1, int(body_radius * 0.12))
         )
 
-        heading_world = np.array(
-            [math.cos(self.robot_angle), math.sin(self.robot_angle)],
-            dtype=np.float32,
-        )
-        heading_screen = np.array(
-            [heading_world[0], -heading_world[1]], dtype=np.float32
-        )
-        perp_screen = np.array(
-            [-heading_screen[1], heading_screen[0]], dtype=np.float32
-        )
-
-        nose_offset = heading_screen * body_radius * 1.3
-        tail_offset = heading_screen * body_radius * 0.7
-        wing_offset = perp_screen * body_radius * 0.8
-
-        nose = (
-            int(center[0] + nose_offset[0]),
-            int(center[1] + nose_offset[1]),
-        )
-        left_wing = (
-            int(center[0] - tail_offset[0] + wing_offset[0]),
-            int(center[1] - tail_offset[1] + wing_offset[1]),
-        )
-        right_wing = (
-            int(center[0] - tail_offset[0] - wing_offset[0]),
-            int(center[1] - tail_offset[1] - wing_offset[1]),
-        )
-
-        pygame.draw.polygon(
-            self._surface, (250, 250, 255), [nose, left_wing, right_wing]
-        )
-        pygame.draw.polygon(
-            self._surface, (40, 80, 200), [nose, left_wing, right_wing], width=1
-        )
-
-        # Thruster animation
-        thruster_wave = (
-            0.7 + 0.3 * (math.sin(self._steps * 0.5 + speed_ratio * 2.0) + 1) / 2
-        )
-        thruster_length = body_radius * (0.4 + 0.6 * speed_ratio) * thruster_wave
-        thruster_vec = -heading_screen * thruster_length
-        thruster_base = (
-            int(center[0] - tail_offset[0]),
-            int(center[1] - tail_offset[1]),
-        )
-        thruster_end = (
-            int(thruster_base[0] + thruster_vec[0]),
-            int(thruster_base[1] + thruster_vec[1]),
-        )
-        flame_color = (
-            255,
-            int(160 + 70 * speed_ratio),
-            int(80 + 100 * speed_ratio),
+        # Orange accent lines
+        stripe_w = max(2, body_radius // 5)
+        pygame.draw.line(
+            sprite,
+            accent,
+            (body_rect.left + int(body_w * 0.22), body_rect.top + int(body_h * 0.22)),
+            (body_rect.left + int(body_w * 0.22), body_rect.bottom - int(body_h * 0.22)),
+            width=stripe_w,
         )
         pygame.draw.line(
-            self._surface, flame_color, thruster_base, thruster_end, width=3
+            sprite,
+            accent,
+            (body_rect.right - int(body_w * 0.22), body_rect.top + int(body_h * 0.22)),
+            (body_rect.right - int(body_w * 0.22), body_rect.bottom - int(body_h * 0.22)),
+            width=stripe_w,
         )
+
+        # Visor panel (front is +X in sprite space)
+        visor_w = int(body_radius * 2.5)
+        visor_h = int(body_radius * 1.6)
+        visor_rect = pygame.Rect(0, 0, visor_w, visor_h)
+        visor_rect.center = (cx + int(body_radius * 0.55), cy)
+        pygame.draw.ellipse(sprite, (18, 20, 26), visor_rect)
+        pygame.draw.ellipse(
+            sprite, (90, 95, 110), visor_rect, width=max(1, int(body_radius * 0.12))
+        )
+
+        # Eyes glow + small smile
+        glow = (90, 235, 255)
+        eye_r = max(2, int(body_radius * 0.28))
+        eye_dx = int(body_radius * 0.35)
+        eye_dy = int(body_radius * 0.20)
+        left_eye = (visor_rect.centerx - eye_dx, visor_rect.centery - eye_dy)
+        right_eye = (visor_rect.centerx + eye_dx, visor_rect.centery - eye_dy)
+        for ex, ey in (left_eye, right_eye):
+            pygame.draw.circle(sprite, (*glow, 70), (ex, ey), int(eye_r * 2.2))
+            pygame.draw.circle(sprite, (*glow, 140), (ex, ey), int(eye_r * 1.6))
+            pygame.draw.circle(sprite, glow, (ex, ey), eye_r)
+        smile_rect = pygame.Rect(0, 0, int(body_radius * 0.9), int(body_radius * 0.55))
+        smile_rect.center = (visor_rect.centerx, visor_rect.centery + int(body_radius * 0.30))
+        pygame.draw.arc(
+            sprite,
+            glow,
+            smile_rect,
+            math.pi * 0.10,
+            math.pi * 0.90,
+            width=max(1, int(body_radius * 0.12)),
+        )
+
+        # Chest glow core
+        core_center = (cx - int(body_radius * 0.35), cy)
+        core_r = max(2, int(body_radius * 0.42))
+        pygame.draw.circle(sprite, (*glow, 55), core_center, int(core_r * 2.0))
+        pygame.draw.circle(sprite, (*glow, 120), core_center, int(core_r * 1.4))
+        pygame.draw.circle(sprite, glow, core_center, core_r)
+        pygame.draw.circle(
+            sprite,
+            accent,
+            core_center,
+            max(2, core_r + max(2, int(body_radius * 0.35))),
+            width=max(1, int(body_radius * 0.12)),
+        )
+
+        # Aura pulse around robot (screen-space after rotate)
+        pulse = 2 + 3 * math.sin(self._steps * 0.3 + speed_ratio * math.pi)
+        pulse_radius = int(body_radius * 2.0 + pulse)
+        pygame.draw.circle(
+            sprite,
+            (150, 200, 255, 95),
+            (cx, cy),
+            pulse_radius,
+            width=max(1, int(body_radius * 0.12)),
+        )
+
+        # Thruster flame behind body (back is -X in sprite space)
+        wave = 0.7 + 0.3 * (math.sin(self._steps * 0.5 + speed_ratio * 2.0) + 1) / 2
+        flame_len = int(body_radius * (0.7 + 1.0 * speed_ratio) * wave)
+        flame_base = (body_rect.left + int(body_radius * 0.15), cy)
+        flame_end = (flame_base[0] - flame_len, flame_base[1])
+        flame_color = (255, int(160 + 70 * speed_ratio), int(80 + 100 * speed_ratio), 210)
+        flame_w = max(1, int(body_radius * 0.25))
+        pygame.draw.line(sprite, flame_color, flame_base, flame_end, width=flame_w)
+        pygame.draw.circle(sprite, flame_color, flame_end, max(1, flame_w))
+
+        angle_deg = float(self.robot_angle * 180.0 / math.pi)
+        rotated = pygame.transform.rotozoom(sprite, angle_deg, 1.0)
+        rect = rotated.get_rect(center=center)
+        self._surface.blit(rotated, rect)
 
 
 class SimpleGoalController:
