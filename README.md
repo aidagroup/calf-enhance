@@ -6,7 +6,12 @@
 
 This repository implements CALF-TD3, a novel reinforcement learning algorithm that combines Critic as Lyapunov Function approach and Twin Delayed Deep Deterministic Policy Gradient (TD3). The project focuses on training agents to control an underwater drone environment.
 
-![Results](gfx/episode_return_calf_td3_vs_td3.png)
+![Results](gfx/goal_reaching_rate_comparison.pdf)
+![Episode Return Comparison](gfx/episode_return_comparison.pdf)
+
+## Policy Comparison
+
+![Baseline vs Enhanced Policy](gfx/robot_stacked_output.gif)
 
 ## Features
 
