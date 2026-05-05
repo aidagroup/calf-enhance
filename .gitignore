@@ -11,5 +11,6 @@ wheels/
 videos/
 .dockerdata/pgdata
 .dockerdata/minio-data
+run/expdata/
 
 .env

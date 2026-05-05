@@ -123,7 +123,10 @@ def mlflow_monitoring():
             repo = git.Repo(REPO_PATH)
 
             if not disable_git:
-                if is_branch_exist("experiments"):
+                current_branch = repo.active_branch.name
+                if current_branch == "experiments":
+                    logger.info("Already on 'experiments' branch")
+                elif is_branch_exist("experiments"):
                     logger.info("Checking out to 'experiments' branch")
                     repo.git.checkout("experiments")
                 else:

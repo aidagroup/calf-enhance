@@ -29,6 +29,7 @@ from src.envs.robot_dynamics import RobotDynamicsMetricsCollector
 from src.envs.robot_navigation import RobotNavigationMetricsCollector
 from src.utils.metrics_controller import MetricsCollector
 from src.envs.underwaterdrone import UnderwaterDroneMetricsCollector
+from src.utils.artifact_uploader import get_artifact_uploader
 
 
 @dataclass
@@ -90,6 +91,10 @@ class Args:
     calfq_anneal_frac: float = 0.9
     """the fraction of the total timesteps to anneal the p_relax and p_relax_decay parameters"""
     calfq_selective_buffer: bool = True
+    save_policy_checkpoints: bool = False
+    """whether to save learning-policy actor checkpoints as MLflow artifacts"""
+    policy_checkpoint_interval: int = 1500
+    """save learning-policy actor checkpoints every N environment steps"""
 
     def __post_init__(self):
         default_experiment_name = os.path.basename(__file__)[: -len(".py")]
@@ -253,6 +258,29 @@ def main(args: Args):
         n_envs=args.num_envs,
         handle_timeout_termination=False,
     )
+
+    def save_policy_checkpoint(global_step: int):
+        uploader = get_artifact_uploader()
+        if uploader is None:
+            raise RuntimeError("ArtifactUploader is not initialized")
+
+        checkpoint = {
+            "global_step": global_step,
+            "env_id": args.env_id,
+            "seed": args.seed,
+            "actor_state_dict": {
+                key: value.detach().cpu()
+                for key, value in actor.state_dict().items()
+            },
+        }
+
+        with uploader.lock:
+            checkpoint_dir = uploader.staging_dir / "policy_checkpoints"
+            checkpoint_dir.mkdir(parents=True, exist_ok=True)
+            torch.save(
+                checkpoint,
+                checkpoint_dir / f"actor_step_{global_step:010d}.pt",
+            )
 
     def q_values(obs, actions):
         torch_obs, torch_actions = (
@@ -534,6 +562,13 @@ def main(args: Args):
                 )
                 print("SPS:", int(global_step / (time.time() - start_time)))
                 metrics_collector.log_pending_metrics(synchronous=True)
+
+        if (
+            args.save_policy_checkpoints
+            and args.policy_checkpoint_interval > 0
+            and global_step % args.policy_checkpoint_interval == 0
+        ):
+            save_policy_checkpoint(global_step)
 
     envs.close()
 

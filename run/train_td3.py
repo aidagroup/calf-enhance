@@ -21,6 +21,7 @@ from collections import defaultdict, deque
 from src.config import config
 from src.envs.robot_dynamics import RobotDynamicsMetricsCollector
 from src.envs.robot_navigation import RobotNavigationMetricsCollector
+from src.envs.underwaterdrone import UnderwaterDroneMetricsCollector
 from src.utils.metrics_controller import MetricsCollector
 
 
@@ -115,20 +116,22 @@ def create_metrics_collector(env_id: str, rolling_window_size: int = 20):
         return RobotDynamicsMetricsCollector(rolling_window_size)
     if env_id.startswith("RobotNavigation"):
         return RobotNavigationMetricsCollector(rolling_window_size)
+    if env_id.startswith("UnderwaterDrone"):
+        return UnderwaterDroneMetricsCollector(rolling_window_size)
     return MetricsCollector(rolling_window_size)
 
 
 def make_env(env_id, seed, idx, capture_video, run_name):
     def thunk():
         if capture_video and idx == 0:
-            env = gym.make(env_id, render_mode="rgb_array")
+            env = gym.make(env_id, render_mode="rgb_array", seed=seed)
             env = gym.wrappers.RecordVideo(
                 env,
                 f"{RUN_PATH}/videos/{run_name}",
                 episode_trigger=lambda e: e % 5 == 0,
             )
         else:
-            env = gym.make(env_id)
+            env = gym.make(env_id, seed=seed)
         env = gym.wrappers.RecordEpisodeStatistics(env)
         env.action_space.seed(seed)
         return env

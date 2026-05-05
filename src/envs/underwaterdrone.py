@@ -216,6 +216,9 @@ class UnderwaterDroneEnv(gym.Env):
             dtype=np.float32,
         )
         self.rng = np.random.RandomState(seed)
+        # Keep visual randomness isolated from episode-state randomness so
+        # rendering/video capture cannot perturb future env resets.
+        self.visual_rng = np.random.RandomState(seed)
 
         self.semimajor_axis = 0.9
         self.semiminor_axis = 0.6
@@ -591,10 +594,10 @@ class UnderwaterDroneEnv(gym.Env):
             for px in range(W):
                 x = (px - self.origin_x) / self.scale_factor
                 val = x / a2 + ((y - b0) ** 2) / b2
-                if val <= 1.0 and self.rng.random() < spawn_prob:
+                if val <= 1.0 and self.visual_rng.random() < spawn_prob:
                     # centre is (x,y) which is *inside* the ellipse by construction
-                    r_pix = self.rng.randint(3, 7)  # radius 3–6 px
-                    t_birth = self.rng.uniform(0, 2)  # random phase
+                    r_pix = self.visual_rng.randint(3, 7)  # radius 3–6 px
+                    t_birth = self.visual_rng.uniform(0, 2)  # random phase
                     self.bubbles.append({"x": x, "y": y, "r": r_pix, "birth": t_birth})
         # ------------------------------------------------------------------
 
