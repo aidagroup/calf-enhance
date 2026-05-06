@@ -57,9 +57,18 @@ studies are launched separately:
 GPUS=0,1 ./scripts/run_calfq_td3_drone_ablation.sh
 ```
 
-This reproduces schedules `af015`, `af040`, `af065`, `pr10_d0995`,
-`pr08_d09995`, and `pr10_d09995` with the hyperparameters used in the
-ablation study.
+This reproduces the published TD3-drone schedules `af015`, `af040`, `af065`,
+and `pr10_d09995` with the hyperparameters used in the ablation study.
+
+The CALF-SAC robot relaxation-schedule sensitivity study is launched with:
+
+```bash
+GPUS=0,1 ./scripts/run_calfq_sac_robot_sensitivity.sh
+```
+
+This compares the default schedule `p_0=0.9`, `lambda_0=0.96` against the
+higher-trust schedule `p_0=0.8`, `lambda_0=0.995` using the same SAC
+hyperparameters as the main robot runs.
 
 All launch scripts create one `tmux` session per run and write terminal logs
 to `run/logs/`. To inspect generated commands without starting training, add
