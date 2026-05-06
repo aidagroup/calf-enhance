@@ -145,11 +145,6 @@ Main training entrypoints:
 - `run/train_sac_residual.py`: residual RL variant of SAC.
 - `run/train_sac_calfq.py`: proposed policy-enhancement method on top of SAC.
 
-Historical notebooks, rollout/video helpers, PPO prototypes, old ad-hoc launch
-scripts, local MLflow data, and intermediate figures are kept locally under
-`run/archive/` and `gfx/archive/`. These archives are intentionally ignored by
-git and are not required for reproducing the main experiments.
-
 ## Results
 
 Main TD3-backbone result figures from the paper:
