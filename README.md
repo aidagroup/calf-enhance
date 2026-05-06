@@ -1,5 +1,8 @@
 # An Agency-Transferring Model-Free Policy Enhancement Technique
 
+This repository contains the experiment code for reproducing the results of
+the paper "An Agency-Transferring Model-Free Policy Enhancement Technique".
+
 ![Demo1](gfx/calf-td3-demo.gif)
 ![Demo2](gfx/robot_stacked_output.gif)
 
