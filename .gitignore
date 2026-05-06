@@ -12,5 +12,7 @@ videos/
 .dockerdata/pgdata
 .dockerdata/minio-data
 run/expdata/
+run/archive/
+gfx/archive/
 
 .env
