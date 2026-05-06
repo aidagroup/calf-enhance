@@ -96,15 +96,15 @@ See `scripts/README.md` for the full launcher layout and execution controls.
 ## Reproducing Paper Figures
 
 The plotting workflow and the CSV snapshots used for the submitted SCL figures
-are copied into `scl-plotting/`. Regenerate all article figures with:
+are copied into `plotting/`. Regenerate all article figures with:
 
 ```bash
-cd scl-plotting
+cd plotting
 uv run python -m calf_plotting --output-dir ../gfx
 ```
 
 This uses the repository `uv` environment and the data roots under
-`scl-plotting/expdata/`. The same package also contains the code for rebuilding
+`plotting/expdata/`. The same package also contains the code for rebuilding
 the final metrics tables and the plotting scripts used for the ablation and
 sensitivity figures.
 
@@ -123,7 +123,7 @@ The repository is organized around three main directories:
   by environment and backbone; each concrete script starts only one method
   batch, creates one `tmux` session per seed, and distributes runs over the
   GPUs listed in `GPUS`.
-- `scl-plotting/` contains the figure-generation package and CSV snapshots
+- `plotting/` contains the figure-generation package and CSV snapshots
   used to reproduce the SCL submission figures and final metrics tables.
 
 The TD3 and SAC training entrypoints use CleanRL implementations as the

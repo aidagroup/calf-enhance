@@ -8,7 +8,7 @@ article figures generated from experiment CSV snapshots.
 From the source-code repository root:
 
 ```bash
-cd scl-plotting
+cd plotting
 uv run python -m calf_plotting --output-dir ../gfx
 ```
 

@@ -27,4 +27,4 @@ Everything else has been moved to `archive/`.
 - `checkpoint_lambda_distance` contains only the summarized data used by
   the checkpoint lambda-distance figure.
 
-See `code/plotting/README.md` for the commands that consume these files.
+See `plotting/README.md` for the commands that consume these files.
